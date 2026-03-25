@@ -1,0 +1,978 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NHMFC BONDS 2026 — PERT/CPM &amp; Gantt</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700;800&display=swap" rel="stylesheet"/>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #060d1a; }
+  input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5) brightness(1.3); cursor: pointer; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: #040a12; }
+  ::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: #2d5a9e; }
+  @media print {
+    @page { size: A2 landscape; margin: 8mm; }
+    body {
+      background: #060d1a !important;
+      color: #e2e8f0 !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    [data-no-print] { display: none !important; }
+    [data-gantt-scroll] {
+      overflow: visible !important;
+      width: auto !important;
+      max-width: none !important;
+    }
+    [data-gantt-chart] {
+      overflow: visible !important;
+      width: max-content !important;
+    }
+    [data-pert-scroll] {
+      overflow: visible !important;
+      width: auto !important;
+      max-width: none !important;
+      height: auto !important;
+    }
+    [data-pert-scaler] {
+      transform: none !important;
+      width: auto !important;
+      height: auto !important;
+      position: static !important;
+    }
+    [data-pert-inner] {
+      transform: none !important;
+      position: static !important;
+    }
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useMemo, useEffect, useRef } = React;
+
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+const INITIAL_TASKS = [
+  { id:"A", name:"Asset Pool Approval",                  predecessors:[],         duration:1   },
+  { id:"B", name:"Engagement of Transaction Parties",    predecessors:["A"],      duration:14  },
+  { id:"C", name:"Financial Structure",                  predecessors:["B"],      duration:93  },
+  { id:"D", name:"Board Approval",                       predecessors:["C"],      duration:91  },
+  { id:"E", name:"DHSUD Certification",                  predecessors:["D"],      duration:95  },
+  { id:"F", name:"Signing / SPT Agreement",              predecessors:["E"],      duration:1   },
+  { id:"G", name:"BSP Endorsement",                      predecessors:["F"],      duration:22  },
+  { id:"H", name:"Final Credit Rating & SEC Submission", predecessors:["B"],      duration:330 },
+  { id:"I", name:"SEC Approval",                         predecessors:["G","H"],  duration:71  },
+  { id:"J", name:"Marketing of RMBS",                    predecessors:["I"],      duration:68  },
+  { id:"K", name:"Bond Issuance",                        predecessors:["J"],      duration:1   },
+];
+
+// ─── Date helpers ─────────────────────────────────────────────────────────────
+function isValidDate(d) { return d instanceof Date && !isNaN(d.getTime()); }
+function addDays(d, n) {
+  if (!isValidDate(d) || n == null || isNaN(n)) return new Date(d);
+  const r = new Date(d); r.setDate(r.getDate() + n); return r;
+}
+function diffDays(a, b) { return Math.round((b - a) / 86400000); }
+function fmtLong(d)  {
+  if (!isValidDate(d)) return "—";
+  return `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+function fmtShort(d) {
+  if (!isValidDate(d)) return "—";
+  return `${MONTH_NAMES[d.getMonth()].slice(0,3)} ${d.getDate()}`;
+}
+function toISO(d) {
+  if (!isValidDate(d)) return "";
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+function fromISO(s) { const [y,m,d] = s.split("-").map(Number); return new Date(y, m-1, d); }
+
+// ─── CPM Engine ───────────────────────────────────────────────────────────────
+function computeCPM(tasks, projectStart) {
+  const map = Object.fromEntries(tasks.map(t => [t.id, t]));
+  const ids  = tasks.map(t => t.id);
+  const es = Object.fromEntries(ids.map(id => [id, 0]));
+  const ef = Object.fromEntries(ids.map(id => [id, 0]));
+  const visited = new Set(), inStack = new Set(), order = [];
+  function visit(id) {
+    if (visited.has(id)) return;
+    if (inStack.has(id)) return;
+    inStack.add(id);
+    (map[id]?.predecessors || []).forEach(p => { if (map[p]) visit(p); });
+    inStack.delete(id);
+    visited.add(id);
+    order.push(id);
+  }
+  ids.forEach(visit);
+  order.forEach(id => {
+    const preds = (map[id].predecessors || []).filter(p => map[p] && ef[p] != null);
+    es[id] = preds.length === 0 ? 0 : Math.max(...preds.map(p => ef[p] + 1));
+    ef[id] = es[id] + (map[id].duration || 1) - 1;
+  });
+  const projectEnd = ids.length ? Math.max(...ids.map(id => ef[id] ?? 0)) : 0;
+  const succ = Object.fromEntries(ids.map(id => [id, []]));
+  tasks.forEach(t => (t.predecessors || []).forEach(p => { if (succ[p]) succ[p].push(t.id); }));
+  const ls = Object.fromEntries(ids.map(id => [id, 0]));
+  const lf = Object.fromEntries(ids.map(id => [id, 0]));
+  [...order].reverse().forEach(id => {
+    const s = succ[id].filter(x => map[x]);
+    lf[id] = s.length === 0 ? projectEnd : Math.min(...s.map(x => ls[x] - 1));
+    ls[id] = lf[id] - (map[id].duration || 1) + 1;
+  });
+  const tf = {}, ff = {};
+  ids.forEach(id => {
+    tf[id] = (ls[id] ?? 0) - (es[id] ?? 0);
+    const s = succ[id].filter(x => map[x]);
+    ff[id] = s.length === 0 ? tf[id] : Math.min(...s.map(x => es[x])) - ef[id] - 1;
+  });
+  const lvl = {};
+  order.forEach(id => {
+    const preds = (map[id].predecessors || []).filter(p => map[p]);
+    lvl[id] = preds.length === 0 ? 0 : Math.max(...preds.map(p => lvl[p] ?? 0)) + 1;
+  });
+  const startDate = id => addDays(projectStart, es[id] ?? 0);
+  const endDate   = id => addDays(projectStart, ef[id] ?? 0);
+  return { es, ef, ls, lf, tf, ff, lvl, projectEnd, succ, startDate, endDate };
+}
+
+function taskColor(tf) {
+  const v = tf ?? 0;
+  if (v === 0) return { bar:"#ef4444", hd:"#7f1d1d", bg:"#991b1b", badge:"#ef4444", label:"CRITICAL"  };
+  if (v <= 1)  return { bar:"#f59e0b", hd:"#78350f", bg:"#92400e", badge:"#f59e0b", label:"NEAR-CRIT" };
+  return              { bar:"#3b82f6", hd:"#1e3a8a", bg:"#1e3a8a", badge:"#3b82f6", label:"NON-CRIT"  };
+}
+
+// ─── Buffered predecessors input ──────────────────────────────────────────────
+function PredInput({ value, onCommit, style }) {
+  const [draft, setDraft] = useState(value);
+  useEffect(() => { setDraft(value); }, [value]);
+  function commit() { onCommit(draft); }
+  function handleChange(e) {
+    let val = e.target.value.toUpperCase();
+    val = val.replace(/([A-Z0-9])([A-Z])/g, "$1,$2");
+    setDraft(val);
+  }
+  return (
+    <input style={style} value={draft} placeholder="none"
+      onChange={handleChange}
+      onBlur={commit}
+      onKeyDown={e => { if (e.key === "Enter") { commit(); e.target.blur(); } }}
+    />
+  );
+}
+
+// ─── Shared Task Editor Table ─────────────────────────────────────────────────
+function TaskEditor({ tasks, setTasks, cpm, mode }) {
+  const [newRow, setNewRow] = useState({ id:"", name:"", predecessors:"", endDate:"" });
+  const [err,    setErr]    = useState("");
+
+  const S = {
+    tbl:   { width:"100%", borderCollapse:"collapse", fontSize:11 },
+    th:    { padding:"7px 10px", textAlign:"left", background:"#091628", color:"#60a5fa", borderBottom:"1px solid #1e3a5f", whiteSpace:"nowrap", fontSize:10 },
+    td:    { padding:"5px 8px", borderBottom:"1px solid #0f172a" },
+    inp:   { background:"#0f172a", border:"1px solid #1e3a5f", color:"#e2e8f0", padding:"3px 7px", borderRadius:3, fontSize:10, fontFamily:"inherit", width:"100%" },
+    dateI: { background:"#0f172a", border:"1px solid #1e3a5f", color:"#93c5fd", padding:"2px 5px", borderRadius:3, fontSize:10, fontFamily:"inherit", colorScheme:"dark" },
+    badge: tf => {
+      const v = tf ?? 0;
+      return {
+        display:"inline-block", padding:"1px 6px", borderRadius:3, fontSize:9, fontWeight:700,
+        background: v===0?"#7f1d1d":v<=1?"#78350f":"#1e3a8a",
+        color:      v===0?"#fca5a5":v<=1?"#fcd34d":"#93c5fd",
+      };
+    },
+    btn: a => ({ padding:"5px 12px", background:a?"#166534":"#0f172a", color:"white", border:a?"1px solid #166534":"1px solid #1e3a5f", borderRadius:4, cursor:"pointer", fontSize:10, fontFamily:"inherit" }),
+    del: { background:"none", border:"none", color:"#475569", cursor:"pointer", fontSize:12, padding:"0 4px" },
+    ro:  { color:"#475569", fontSize:10 },
+  };
+
+  function updateTask(id, field, val) {
+    setTasks(prev => prev.map(t => {
+      if (t.id !== id) return t;
+      if (field === "predecessors")
+        return { ...t, predecessors: val.split(",").map(s => s.trim().toUpperCase()).filter(Boolean) };
+      if (field === "endDate") {
+        const sd  = cpm.startDate(id);
+        const end = fromISO(val);
+        return { ...t, duration: Math.max(1, diffDays(sd, end) + 1) };
+      }
+      return { ...t, [field]: val };
+    }));
+  }
+
+  function removeTask(id) {
+    setTasks(prev => prev.filter(t => t.id !== id).map(t => ({
+      ...t, predecessors: t.predecessors.filter(p => p !== id)
+    })));
+  }
+
+  function addTask() {
+    const id = newRow.id.trim().toUpperCase();
+    if (!id) { setErr("ID required"); return; }
+    if (tasks.find(t => t.id === id)) { setErr(`"${id}" already exists`); return; }
+    const preds = newRow.predecessors.split(",").map(s => s.trim().toUpperCase()).filter(Boolean);
+    setTasks(prev => [...prev, { id, name: newRow.name || id, predecessors: preds, duration: 1 }]);
+    setNewRow({ id:"", name:"", predecessors:"", endDate:"" });
+    setErr("");
+  }
+
+  const showCPM = mode === "pert";
+
+  return (
+    <div style={{overflowX:"auto"}}>
+      <table style={S.tbl}>
+        <thead>
+          <tr>
+            <th style={S.th}>ID</th>
+            <th style={S.th}>Task Name</th>
+            <th style={S.th}>Predecessors</th>
+            <th style={S.th}>Start (auto)</th>
+            <th style={S.th}>End Date ✎</th>
+            <th style={S.th}>Cal Days</th>
+            {showCPM && <><th style={S.th}>ES</th><th style={S.th}>EF</th><th style={S.th}>LS</th><th style={S.th}>LF</th></>}
+            <th style={S.th}>TF</th>
+            <th style={S.th}>FF</th>
+            <th style={S.th}>Type</th>
+            <th style={S.th}></th>
+          </tr>
+        </thead>
+        <tbody>
+          {tasks.map(t => {
+            const tfVal = cpm.tf[t.id] ?? 0;
+            const c   = taskColor(tfVal);
+            const sd  = cpm.startDate(t.id);
+            const ed  = cpm.endDate(t.id);
+            const sdISO = toISO(sd);
+            const edISO = toISO(ed);
+            return (
+              <tr key={t.id} style={{background:"#060d1a"}}>
+                <td style={{...S.td, fontWeight:800, color:c.badge}}>{t.id}</td>
+                <td style={S.td}><input style={S.inp} value={t.name} onChange={e=>updateTask(t.id,"name",e.target.value)}/></td>
+                <td style={S.td}><PredInput style={{...S.inp,width:80}} value={t.predecessors.join(",")} onCommit={val=>updateTask(t.id,"predecessors",val)}/></td>
+                <td style={{...S.td,...S.ro,whiteSpace:"nowrap"}}>{fmtShort(sd)}</td>
+                <td style={S.td}>
+                  <input type="date" style={S.dateI} value={edISO} min={sdISO}
+                    onChange={e => e.target.value && updateTask(t.id,"endDate",e.target.value)}/>
+                </td>
+                <td style={{...S.td,...S.ro,textAlign:"center"}}>{t.duration}</td>
+                {showCPM && <>
+                  <td style={{...S.td,...S.ro}}>{cpm.es[t.id]??0}</td>
+                  <td style={{...S.td,...S.ro}}>{cpm.ef[t.id]??0}</td>
+                  <td style={{...S.td,...S.ro}}>{cpm.ls[t.id]??0}</td>
+                  <td style={{...S.td,...S.ro}}>{cpm.lf[t.id]??0}</td>
+                </>}
+                <td style={S.td}><span style={S.badge(tfVal)}>{tfVal}d</span></td>
+                <td style={{...S.td,...S.ro}}>{cpm.ff[t.id]??0}d</td>
+                <td style={S.td}><span style={S.badge(tfVal)}>{c.label}</span></td>
+                <td style={S.td}><button style={S.del} onClick={()=>removeTask(t.id)}>✕</button></td>
+              </tr>
+            );
+          })}
+          <tr style={{background:"#040a12"}}>
+            <td style={S.td}><input style={{...S.inp,width:36}} placeholder="ID" value={newRow.id} onChange={e=>setNewRow(r=>({...r,id:e.target.value.toUpperCase()}))}/></td>
+            <td style={S.td}><input style={S.inp} placeholder="Task name" value={newRow.name} onChange={e=>setNewRow(r=>({...r,name:e.target.value}))}/></td>
+            <td style={S.td}><input style={{...S.inp,width:80}} placeholder="e.g. A,B" value={newRow.predecessors} onChange={e=>setNewRow(r=>({...r,predecessors:e.target.value.toUpperCase()}))}/></td>
+            <td colSpan={showCPM?8:4} style={S.td}>
+              <button onClick={addTask} style={S.btn(true)}>+ Add Task</button>
+              {err && <span style={{marginLeft:10,color:"#f87171",fontSize:10}}>{err}</span>}
+            </td>
+            <td style={S.td}/>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ─── PERT Layout ──────────────────────────────────────────────────────────────
+const NW=170, NH=96, LGAP=230, RGAP=130;
+
+function computeLayout(tasks, lvl) {
+  const groups = {};
+  tasks.forEach(t => { const l = lvl[t.id]??0; (groups[l]=groups[l]||[]).push(t.id); });
+  const pos = {};
+  Object.entries(groups).forEach(([lv, ids]) => {
+    const x = parseInt(lv)*LGAP+40;
+    ids.forEach((id,i) => { pos[id]={x, y:40+i*RGAP}; });
+  });
+  const maxX = Math.max(...Object.values(pos).map(p=>p.x))+NW+60;
+  const maxY = Math.max(...Object.values(pos).map(p=>p.y))+NH+60;
+  return { pos, maxX, maxY };
+}
+
+function Arrow({ from, to, isCrit, pos }) {
+  if (!pos[from]||!pos[to]) return null;
+  const x1=pos[from].x+NW, y1=pos[from].y+NH/2;
+  const x2=pos[to].x,      y2=pos[to].y+NH/2;
+  const mx=(x1+x2)/2;
+  return (
+    <path d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`}
+      fill="none"
+      stroke={isCrit?"#ef4444":"#334155"}
+      strokeWidth={isCrit?2.5:1.5}
+      strokeDasharray={isCrit?"":"5,4"}
+      markerEnd={`url(#pa-${isCrit?"c":"n"})`}
+    />
+  );
+}
+
+function PertNode({ task, cpm }) {
+  const p = cpm.pos[task.id]; if (!p) return null;
+  const c  = taskColor(cpm.tf[task.id]);
+  const sd = cpm.startDate(task.id), ed = cpm.endDate(task.id);
+  const short = task.name.length>24 ? task.name.slice(0,22)+"…" : task.name;
+  return (
+    <g transform={`translate(${p.x},${p.y})`}>
+      <rect width={NW} height={NH} rx="5" fill={c.bg}/>
+      <rect width={NW} height={22} rx="5" fill={c.hd}/>
+      <rect y={18} width={NW} height={6} fill={c.hd}/>
+      <text x={NW/2} y={15} textAnchor="middle" fill="#fff" fontSize={12} fontWeight="800" fontFamily="'IBM Plex Mono',monospace">
+        {task.id}  ·  {task.duration}d
+      </text>
+      <text x={NW/2} y={35} textAnchor="middle" fill="rgba(255,255,255,.85)" fontSize={8.5} fontFamily="'IBM Plex Mono',monospace">
+        {short}
+      </text>
+      <text x={8}    y={51} fill="rgba(255,255,255,.55)" fontSize={7.5} fontFamily="monospace">ES {fmtShort(sd)}</text>
+      <text x={NW-8} y={51} textAnchor="end" fill="rgba(255,255,255,.55)" fontSize={7.5} fontFamily="monospace">EF {fmtShort(ed)}</text>
+      <line x1={0} y1={55} x2={NW} y2={55} stroke="rgba(255,255,255,.12)"/>
+      <text x={8}    y={67} fill="rgba(255,255,255,.55)" fontSize={7.5} fontFamily="monospace">LS {cpm.ls[task.id]}</text>
+      <text x={NW-8} y={67} textAnchor="end" fill="rgba(255,255,255,.55)" fontSize={7.5} fontFamily="monospace">LF {cpm.lf[task.id]}</text>
+      <line x1={0} y1={71} x2={NW} y2={71} stroke="rgba(255,255,255,.12)"/>
+      <text x={NW/2} y={87} textAnchor="middle" fill="rgba(255,255,255,.9)" fontSize={9} fontWeight="700" fontFamily="monospace">
+        TF={cpm.tf[task.id]}d · FF={cpm.ff[task.id]}d
+      </text>
+    </g>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  PERT-CPM TAB  (with zoom)
+// ═══════════════════════════════════════════════════════════════════════════════
+function PertTab({ tasks, setTasks, projectStart }) {
+  const [showEd, setShowEd] = useState(true);
+  const [zoom,   setZoom]   = useState(1);
+  const raw    = useMemo(()=>computeCPM(tasks,projectStart),[tasks,projectStart]);
+  const layout = useMemo(()=>computeLayout(tasks,raw.lvl),[tasks,raw.lvl]);
+  const cpm    = {...raw,...layout};
+
+  const ZOOM_PRESETS = [0.5, 0.75, 1, 1.25, 1.5, 2];
+
+  const btnBase = {
+    fontFamily:"inherit", cursor:"pointer", borderRadius:4,
+    border:"1px solid #1e3a5f", background:"#0f172a", color:"#94a3b8",
+    fontSize:10, padding:"4px 9px", transition:"all 0.15s",
+  };
+  const btnActive = { ...btnBase, background:"#1d4ed8", color:"#fff", border:"1px solid #3b82f6", fontWeight:700 };
+  const btnSm   = a => ({ ...(a?btnActive:btnBase), padding:"5px 14px" });
+
+  function handleWheel(e) {
+    e.preventDefault();
+    const delta = e.deltaY < 0 ? 0.08 : -0.08;
+    setZoom(z => Math.min(3, Math.max(0.2, parseFloat((z + delta).toFixed(2)))));
+  }
+
+  return (
+    <div>
+      {/* ── Toolbar ── */}
+      <div style={{
+        padding:"8px 24px", borderBottom:"1px solid #0f2a4a",
+        display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8,
+      }}>
+        <div style={{fontSize:11, color:"#64748b"}}>
+          ✏️ Edit <b style={{color:"#93c5fd"}}>End Date</b> to change duration
+          &nbsp;·&nbsp; Edit <b style={{color:"#93c5fd"}}>Predecessors</b> to rewire network
+          &nbsp;·&nbsp; <span style={{color:"#475569"}}>🖱 Scroll wheel to zoom</span>
+        </div>
+
+        <div style={{display:"flex", gap:5, alignItems:"center", flexWrap:"wrap"}}>
+          {/* Zoom controls */}
+          <span style={{fontSize:10, color:"#475569", marginRight:2}}>🔍</span>
+          <button
+            onClick={()=>setZoom(z=>Math.max(0.2,parseFloat((z-0.1).toFixed(2))))}
+            style={{...btnBase, padding:"4px 9px", fontSize:13, lineHeight:1}}
+            title="Zoom out">−</button>
+          <span style={{
+            fontSize:10, color:"#93c5fd", minWidth:38, textAlign:"center",
+            fontFamily:"'IBM Plex Mono',monospace", fontWeight:700,
+          }}>{Math.round(zoom*100)}%</span>
+          <button
+            onClick={()=>setZoom(z=>Math.min(3,parseFloat((z+0.1).toFixed(2))))}
+            style={{...btnBase, padding:"4px 9px", fontSize:13, lineHeight:1}}
+            title="Zoom in">+</button>
+
+          {/* Preset zoom buttons */}
+          <span style={{width:1,background:"#1e3a5f",alignSelf:"stretch",margin:"0 3px"}}/>
+          {ZOOM_PRESETS.map(z => (
+            <button key={z}
+              onClick={()=>setZoom(z)}
+              style={Math.abs(zoom-z)<0.01 ? {...btnActive,padding:"4px 9px"} : {...btnBase,padding:"4px 9px"}}
+            >{z===1?"1×":`${z}×`}</button>
+          ))}
+          <button
+            onClick={()=>setZoom(1)}
+            title="Reset zoom"
+            style={{...btnBase, padding:"4px 8px", color:"#64748b", fontSize:11}}>↺</button>
+
+          <span style={{width:1,background:"#1e3a5f",alignSelf:"stretch",margin:"0 3px"}}/>
+          <button style={btnSm(showEd)} onClick={()=>setShowEd(v=>!v)}>
+            {showEd?"▲ Hide":"▼ Show"} Editor
+          </button>
+        </div>
+      </div>
+
+      {showEd && (
+        <div style={{padding:"12px 24px", borderBottom:"1px solid #0f2a4a"}}>
+          <TaskEditor tasks={tasks} setTasks={setTasks} cpm={cpm} mode="pert"/>
+        </div>
+      )}
+
+      {/* ── Legend ── */}
+      <div style={{
+        padding:"8px 24px 4px", fontSize:10.5, color:"#475569",
+        display:"flex", gap:20, flexWrap:"wrap", alignItems:"center",
+      }}>
+        <span>● <span style={{color:"#ef4444"}}>RED = Critical (TF=0)</span></span>
+        <span>● <span style={{color:"#f59e0b"}}>AMBER = Near-Critical (TF≤1)</span></span>
+        <span>● <span style={{color:"#3b82f6"}}>BLUE = Non-Critical</span></span>
+        <span style={{marginLeft:"auto", color:"#334155", fontSize:10}}>
+          Start auto-adjusts · Edit End Date to set duration
+        </span>
+      </div>
+
+      {/* ── PERT Diagram (zoomable) ── */}
+      <div
+        data-pert-scroll
+        style={{
+          padding:"8px 24px 32px",
+          overflow:"auto",
+          cursor: zoom !== 1 ? "grab" : "default",
+        }}
+        onWheel={handleWheel}
+      >
+        {/*
+          Outer div provides the scrollable area at zoom size.
+          Inner scaler div applies the CSS transform.
+        */}
+        <div
+          data-pert-scaler
+          style={{
+            width:  cpm.maxX * zoom,
+            height: cpm.maxY * zoom,
+            position:"relative",
+            flexShrink:0,
+          }}
+        >
+          <div
+            data-pert-inner
+            style={{
+              position:"absolute",
+              top:0, left:0,
+              transform:`scale(${zoom})`,
+              transformOrigin:"0 0",
+            }}
+          >
+            <svg width={cpm.maxX} height={cpm.maxY}
+              style={{background:"#040a12", borderRadius:8, border:"1px solid #0f2a4a", display:"block"}}
+            >
+              <defs>
+                <marker id="pa-c" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+                  <path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/>
+                </marker>
+                <marker id="pa-n" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto">
+                  <path d="M0,0 L0,6 L8,3 z" fill="#334155"/>
+                </marker>
+              </defs>
+              {tasks.map(t=>(t.predecessors||[]).map(pred=>{
+                const isCrit = cpm.tf[pred]===0 && cpm.tf[t.id]===0;
+                return <Arrow key={`${pred}-${t.id}`} from={pred} to={t.id} isCrit={isCrit} pos={cpm.pos}/>;
+              }))}
+              {tasks.map(t=><PertNode key={t.id} task={t} cpm={cpm}/>)}
+            </svg>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  GANTT TAB
+// ═══════════════════════════════════════════════════════════════════════════════
+function GanttTab({ tasks, setTasks, projectStart }) {
+  const [showEd, setShowEd] = useState(true);
+  const [zoom,   setZoom]   = useState(1);
+  const scrollRef           = useRef(null);
+  const [scanX,  setScanX]  = useState(0);
+
+  const cpm       = useMemo(()=>computeCPM(tasks,projectStart),[tasks,projectStart]);
+  const today     = new Date();
+  const totalDays = Math.max(cpm.projectEnd+80,1);
+  const pxPerDay  = 1.4*zoom;
+  const chartW    = totalDays*pxPerDay;
+  const ROW_H     = 38;
+  const HDR_H     = 56;
+  const LABEL_W   = 220;
+
+  useEffect(()=>{
+    if(!scrollRef.current) return;
+    const tx = diffDays(projectStart, today)*pxPerDay;
+    scrollRef.current.scrollLeft = Math.max(0, tx - scrollRef.current.clientWidth/2);
+  },[pxPerDay, projectStart]);
+
+  useEffect(()=>{
+    let f;
+    const tick = ()=>{ setScanX(diffDays(projectStart,today)*pxPerDay); f=requestAnimationFrame(tick); };
+    f=requestAnimationFrame(tick);
+    return ()=>cancelAnimationFrame(f);
+  },[pxPerDay, projectStart]);
+
+  const months=[];
+  let cur = new Date(projectStart.getFullYear(), projectStart.getMonth(), 1);
+  while(diffDays(projectStart,cur) < totalDays){
+    const next = new Date(cur.getFullYear(), cur.getMonth()+1, 1);
+    const x = Math.max(0, diffDays(projectStart,cur))*pxPerDay;
+    const w = diffDays(cur,next)*pxPerDay;
+    months.push({ label:`${MONTH_NAMES[cur.getMonth()]} ${cur.getFullYear()}`, x, w });
+    cur = next;
+  }
+  const weeks = [];
+  let wd = new Date(projectStart);
+  while(diffDays(projectStart,wd) < totalDays){
+    weeks.push({ x: diffDays(projectStart,wd)*pxPerDay, label: wd.getDate() });
+    wd = addDays(wd, 7);
+  }
+
+  const todayOff = diffDays(projectStart, today);
+  const chartH   = HDR_H + tasks.length*ROW_H + 20;
+
+  const S = {
+    btn: a => ({
+      padding:"3px 8px", fontSize:9, fontFamily:"inherit", cursor:"pointer",
+      background: a?"#1d4ed8":"#0f172a", color:"white",
+      border:"1px solid #1e3a5f", borderRadius:4,
+    }),
+    btnMd: a => ({
+      padding:"5px 12px", fontSize:10, fontFamily:"inherit", cursor:"pointer",
+      background: a?"#1d4ed8":"#0f172a", color:"white",
+      border:"1px solid #1e3a5f", borderRadius:4,
+    }),
+  };
+
+  return (
+    <div>
+      <div style={{
+        padding:"8px 24px", borderBottom:"1px solid #0f2a4a",
+        display:"flex", justifyContent:"space-between", alignItems:"center", gap:12, flexWrap:"wrap",
+      }}>
+        <div style={{fontSize:11, color:"#64748b", fontFamily:"'IBM Plex Mono',monospace"}}>
+          ✏️ Edit tasks below — bars animate instantly &nbsp;·&nbsp;
+          <span style={{color:"#22d3ee"}}>TODAY: {fmtShort(today)}</span>
+          &nbsp;·&nbsp;End: <span style={{color:"#f87171"}}>{fmtLong(addDays(projectStart,cpm.projectEnd))}</span>
+          &nbsp;·&nbsp;<span style={{color:"#34d399"}}>{cpm.projectEnd+1} cal. days</span>
+        </div>
+        <div style={{display:"flex", gap:6, alignItems:"center"}}>
+          <span style={{fontSize:10, color:"#475569"}}>Zoom</span>
+          {[0.6,1,1.5,2.5].map(z=>(
+            <button key={z} onClick={()=>setZoom(z)} style={S.btn(zoom===z)}>
+              {z===0.6?"−−":z===1?"1×":z===1.5?"1.5×":"2×"}
+            </button>
+          ))}
+          <button style={S.btnMd(showEd)} onClick={()=>setShowEd(v=>!v)}>
+            {showEd?"▲ Hide":"▼ Show"} Editor
+          </button>
+        </div>
+      </div>
+
+      {showEd && (
+        <div style={{padding:"10px 24px", borderBottom:"1px solid #0f2a4a"}}>
+          <TaskEditor tasks={tasks} setTasks={setTasks} cpm={cpm} mode="gantt"/>
+        </div>
+      )}
+
+      <div style={{
+        padding:"5px 24px", fontSize:10, color:"#475569",
+        display:"flex", gap:16, flexWrap:"wrap", fontFamily:"'IBM Plex Mono',monospace",
+      }}>
+        <span>■ <span style={{color:"#ef4444"}}>CRITICAL</span></span>
+        <span>■ <span style={{color:"#f59e0b"}}>NEAR-CRIT</span></span>
+        <span>■ <span style={{color:"#3b82f6"}}>NON-CRIT</span></span>
+        <span style={{color:"#334155"}}>░ = float &nbsp; │ = today</span>
+      </div>
+
+      {/* Chart */}
+      <div data-gantt-chart style={{display:"flex", overflowX:"hidden"}}>
+        {/* Fixed labels column */}
+        <div style={{minWidth:LABEL_W, flexShrink:0, background:"#040a12", borderRight:"1px solid #0f2a4a", zIndex:2}}>
+          <div style={{height:HDR_H, borderBottom:"1px solid #1e3a5f", display:"flex", alignItems:"flex-end", padding:"0 0 6px 14px"}}>
+            <span style={{fontSize:10, color:"#475569", fontFamily:"'IBM Plex Mono',monospace"}}>TASK</span>
+          </div>
+          {tasks.map((t,i)=>{
+            const c = taskColor(cpm.tf[t.id]);
+            return (
+              <div key={t.id} style={{
+                height:ROW_H, display:"flex", alignItems:"center",
+                padding:"0 12px", borderBottom:"1px solid #091628",
+                background:i%2===0?"#040a12":"#060d1a", gap:8,
+              }}>
+                <span style={{fontWeight:800, color:c.badge, fontFamily:"'IBM Plex Mono',monospace", fontSize:11, minWidth:18}}>{t.id}</span>
+                <span style={{color:"#cbd5e1", fontSize:10, fontFamily:"'IBM Plex Mono',monospace", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{t.name}</span>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Scrollable SVG */}
+        <div ref={scrollRef} data-gantt-scroll style={{overflowX:"auto", flexGrow:1}}>
+          <svg width={chartW} height={chartH} style={{display:"block", background:"#040a12"}}>
+            {/* Month bands */}
+            {months.map((m,i)=>(
+              <g key={i}>
+                <rect x={m.x} y={0} width={m.w} height={28} fill={i%2===0?"#050c1a":"#060d1c"}/>
+                <text x={m.x+m.w/2} y={18} textAnchor="middle" fill="#60a5fa" fontSize={10} fontFamily="'IBM Plex Mono',monospace" fontWeight="700">{m.label}</text>
+                <line x1={m.x} y1={0} x2={m.x} y2={chartH} stroke="#0f172a" strokeWidth={1}/>
+              </g>
+            ))}
+            {/* Week ticks */}
+            {weeks.map((w,i)=>(
+              <g key={i}>
+                <line x1={w.x} y1={28} x2={w.x} y2={HDR_H} stroke="#0f172a" strokeWidth={1}/>
+                <text x={w.x+2} y={42} fill="#334155" fontSize={8} fontFamily="'IBM Plex Mono',monospace">{w.label}</text>
+              </g>
+            ))}
+            <line x1={0} y1={HDR_H} x2={chartW} y2={HDR_H} stroke="#1e3a5f" strokeWidth={1}/>
+            {/* Row backgrounds */}
+            {tasks.map((t,i)=>(
+              <rect key={t.id} x={0} y={HDR_H+i*ROW_H} width={chartW} height={ROW_H} fill={i%2===0?"#040a12":"#060d1a"}/>
+            ))}
+            {/* Dependency arrows */}
+            {tasks.map(t=>(t.predecessors||[]).map(pred=>{
+              const pi=tasks.findIndex(tt=>tt.id===pred), ti=tasks.findIndex(tt=>tt.id===t.id);
+              if(pi<0||ti<0) return null;
+              const x1=(cpm.ef[pred]+1)*pxPerDay, y1=HDR_H+pi*ROW_H+ROW_H/2;
+              const x2=cpm.es[t.id]*pxPerDay,     y2=HDR_H+ti*ROW_H+ROW_H/2;
+              const isCrit = cpm.tf[pred]===0 && cpm.tf[t.id]===0;
+              return (
+                <path key={`${pred}-${t.id}`}
+                  d={`M${x1},${y1} C${x1+20},${y1} ${x2-20},${y2} ${x2},${y2}`}
+                  fill="none"
+                  stroke={isCrit?"rgba(239,68,68,0.4)":"rgba(51,65,85,0.5)"}
+                  strokeWidth={1.2} strokeDasharray={isCrit?"":"3,3"}
+                  markerEnd={`url(#ga-${isCrit?"c":"n"})`}
+                />
+              );
+            }))}
+            {/* Task bars */}
+            {tasks.map((t,i)=>{
+              const c  = taskColor(cpm.tf[t.id]);
+              const x  = cpm.es[t.id]*pxPerDay;
+              const w  = Math.max(t.duration*pxPerDay, 3);
+              const fW = Math.max(cpm.tf[t.id]*pxPerDay, 0);
+              const y  = HDR_H + i*ROW_H;
+              const bh = ROW_H - 10;
+              return (
+                <g key={t.id} transform={`translate(${x},${y+5})`}>
+                  {cpm.tf[t.id]>0 && <rect x={0} y={4} width={w+fW} height={bh-8} rx={2} fill={c.bar} opacity={0.13}/>}
+                  <rect x={0} y={0} width={w} height={bh} rx={3} fill={c.bar} style={{transition:"width 0.35s cubic-bezier(.4,0,.2,1)"}}/>
+                  <rect x={0} y={0} width={w} height={bh/3} rx={3} fill="rgba(255,255,255,0.13)"/>
+                  {w>50 && <text x={6} y={bh/2+4} fill="#fff" fontSize={9} fontFamily="'IBM Plex Mono',monospace" fontWeight="700" style={{pointerEvents:"none"}}>{t.duration}d</text>}
+                </g>
+              );
+            })}
+            {/* Today line */}
+            {todayOff>=0 && todayOff<=totalDays && (
+              <g>
+                <line x1={scanX} y1={0} x2={scanX} y2={chartH} stroke="#22d3ee" strokeWidth={1.5} strokeDasharray="4,3" opacity={0.8}/>
+                <rect x={scanX-18} y={0} width={36} height={20} rx={3} fill="#22d3ee"/>
+                <text x={scanX} y={13} textAnchor="middle" fill="#000" fontSize={8} fontFamily="'IBM Plex Mono',monospace" fontWeight="800">TODAY</text>
+              </g>
+            )}
+            <defs>
+              <marker id="ga-c" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="rgba(239,68,68,0.6)"/></marker>
+              <marker id="ga-n" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="rgba(51,65,85,0.6)"/></marker>
+            </defs>
+          </svg>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+//  ROOT APP
+// ═══════════════════════════════════════════════════════════════════════════════
+function App() {
+  const [tab,          setTab]          = useState("gantt");
+  const [tasks,        setTasks]        = useState(INITIAL_TASKS);
+  const [title,        setTitle]        = useState("NHMFC BONDS 2026");
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [projectStart, setProjectStart] = useState(new Date(2026, 4, 13));
+  const [saveMsg,      setSaveMsg]      = useState("");
+  const titleRef = useRef(null);
+
+  const raw        = useMemo(()=>computeCPM(tasks,projectStart),[tasks,projectStart]);
+  const projectEnd = addDays(projectStart, raw.projectEnd);
+  const critPath   = tasks
+    .filter(t=>raw.tf[t.id]===0)
+    .sort((a,b)=>raw.es[a.id]-raw.es[b.id])
+    .map(t=>t.id)
+    .join(" → ");
+
+  useEffect(()=>{ if(editingTitle && titleRef.current) titleRef.current.focus(); },[editingTitle]);
+
+  // ── Save Changes: re-emit this HTML file with current state baked in ──
+  function handleSaveChanges() {
+    try {
+      const src = document.querySelector('script[type="text/babel"]').textContent;
+      const tasksJson = JSON.stringify(tasks, null, 2);
+      const titleJson = JSON.stringify(title);
+      const [sy, sm, sd] = toISO(projectStart).split("-").map(Number);
+
+      let patched = src
+        .replace(/const INITIAL_TASKS = \[[\s\S]*?\];/, `const INITIAL_TASKS = ${tasksJson};`)
+        .replace(/useState\("NHMFC BONDS 2026"\)/, `useState(${titleJson})`)
+        .replace(/useState\(new Date\(\d+, \d+, \d+\)\)/, `useState(new Date(${sy}, ${sm-1}, ${sd}))`);
+
+      const newHtml = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>${title}</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"><\/script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"><\/script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"><\/script>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;700;800&display=swap" rel="stylesheet"/>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { background: #060d1a; }
+input[type=date]::-webkit-calendar-picker-indicator { filter: invert(0.5) brightness(1.3); cursor: pointer; }
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: #040a12; }
+::-webkit-scrollbar-thumb { background: #1e3a5f; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #2d5a9e; }
+@media print {
+  @page { size: A2 landscape; margin: 8mm; }
+  body { background: #060d1a !important; color: #e2e8f0 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  [data-no-print] { display: none !important; }
+  [data-gantt-scroll] { overflow: visible !important; width: auto !important; max-width: none !important; }
+  [data-gantt-chart]  { overflow: visible !important; width: max-content !important; }
+  [data-pert-scroll]  { overflow: visible !important; width: auto !important; max-width: none !important; height: auto !important; }
+  [data-pert-scaler]  { transform: none !important; width: auto !important; height: auto !important; position: static !important; }
+  [data-pert-inner]   { transform: none !important; position: static !important; }
+}
+<\/style>
+<\/head>
+<body>
+<div id="root"><\/div>
+<script type="text/babel">
+${patched}
+<\/script>
+<\/body>
+<\/html>`;
+
+      const blob = new Blob([newHtml], { type:"text/html" });
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href = url;
+      a.download = `NHMFC_Bonds_Saved_${new Date().toISOString().slice(0,10)}.html`;
+      a.click();
+      URL.revokeObjectURL(url);
+      setSaveMsg("✔ Saved!");
+      setTimeout(()=>setSaveMsg(""), 2500);
+    } catch(e) {
+      console.error(e);
+      setSaveMsg("⚠ Error");
+      setTimeout(()=>setSaveMsg(""), 2500);
+    }
+  }
+
+  // ── Download PDF: expand all overflow containers so nothing is clipped ──
+  function handleDownloadPDF() {
+    // Collect all scrollable containers and expand them
+    const restored = [];
+    const targets = [
+      ...document.querySelectorAll('[data-gantt-scroll]'),
+      ...document.querySelectorAll('[data-gantt-chart]'),
+      ...document.querySelectorAll('[data-pert-scroll]'),
+      ...document.querySelectorAll('[data-pert-scaler]'),
+      ...document.querySelectorAll('[data-pert-inner]'),
+    ];
+
+    targets.forEach(el => {
+      restored.push({
+        el,
+        overflow:   el.style.overflow,
+        overflowX:  el.style.overflowX,
+        overflowY:  el.style.overflowY,
+        width:      el.style.width,
+        height:     el.style.height,
+        maxWidth:   el.style.maxWidth,
+        position:   el.style.position,
+        transform:  el.style.transform,
+      });
+      el.style.overflow  = "visible";
+      el.style.overflowX = "visible";
+      el.style.overflowY = "visible";
+      el.style.maxWidth  = "none";
+      if (el.hasAttribute('data-pert-scaler') || el.hasAttribute('data-pert-inner')) {
+        el.style.transform = "none";
+        el.style.position  = "static";
+        el.style.width     = "auto";
+        el.style.height    = "auto";
+      } else if (el.scrollWidth > el.clientWidth) {
+        el.style.width = el.scrollWidth + "px";
+      }
+    });
+
+    const style = document.createElement("style");
+    style.id = "__pdf_print_style";
+    style.innerHTML = `
+      @media print {
+        body { background:#060d1a!important; color:#e2e8f0!important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+        [data-no-print] { display:none!important; }
+        * { box-sizing:border-box; }
+        @page { size:A2 landscape; margin:8mm; }
+      }
+    `;
+    document.head.appendChild(style);
+
+    window.print();
+
+    setTimeout(()=>{
+      restored.forEach(({ el, overflow, overflowX, overflowY, width, height, maxWidth, position, transform })=>{
+        el.style.overflow  = overflow;
+        el.style.overflowX = overflowX;
+        el.style.overflowY = overflowY;
+        el.style.width     = width;
+        el.style.height    = height;
+        el.style.maxWidth  = maxWidth;
+        el.style.position  = position;
+        el.style.transform = transform;
+      });
+      const s = document.getElementById("__pdf_print_style");
+      if (s) s.remove();
+    }, 2000);
+  }
+
+  const hdrDateStyle = {
+    background:"#0a1628", border:"1px solid #1e3a5f", color:"#93c5fd",
+    fontFamily:"'IBM Plex Mono',monospace", fontSize:11, borderRadius:4,
+    padding:"3px 7px", outline:"none", colorScheme:"dark",
+  };
+
+  return (
+    <div style={{fontFamily:"'IBM Plex Mono',monospace", background:"#060d1a", color:"#e2e8f0", minHeight:"100vh"}}>
+
+      {/* ── HEADER ── */}
+      <div style={{padding:"14px 24px", background:"#050b14", borderBottom:"1px solid #0f2a4a"}}>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", flexWrap:"wrap", gap:14}}>
+
+          <div>
+            {/* Editable title */}
+            <div style={{display:"flex", alignItems:"center", gap:6, marginBottom:8}}>
+              {editingTitle ? (
+                <input ref={titleRef}
+                  value={title}
+                  onChange={e=>setTitle(e.target.value)}
+                  onBlur={()=>setEditingTitle(false)}
+                  onKeyDown={e=>e.key==="Enter"&&setEditingTitle(false)}
+                  style={{
+                    background:"transparent", border:"none",
+                    borderBottom:"1px solid #3b82f6",
+                    color:"#60a5fa", fontFamily:"'IBM Plex Mono',monospace",
+                    fontSize:17, fontWeight:800, letterSpacing:"2px",
+                    outline:"none", padding:"0 2px",
+                    width:`${Math.max(title.length+2,10)}ch`,
+                  }}
+                />
+              ) : (
+                <span onClick={()=>setEditingTitle(true)} title="Click to edit"
+                  style={{
+                    fontSize:17, fontWeight:800, color:"#60a5fa", letterSpacing:"2px",
+                    cursor:"text", borderBottom:"1px dashed #1e3a5f", paddingBottom:1,
+                  }}>
+                  {title}
+                </span>
+              )}
+              <span onClick={()=>setEditingTitle(true)}
+                style={{fontSize:11, color:"#334155", cursor:"pointer", userSelect:"none"}}>✎</span>
+            </div>
+
+            {/* Project start / end / stats */}
+            <div style={{display:"flex", alignItems:"center", gap:10, flexWrap:"wrap"}}>
+              <span style={{fontSize:10, color:"#475569"}}>START</span>
+              <input type="date" style={hdrDateStyle}
+                value={toISO(projectStart)}
+                onChange={e=>e.target.value&&setProjectStart(fromISO(e.target.value))}/>
+              <span style={{color:"#1e3a5f"}}>→</span>
+              <span style={{fontSize:10, color:"#475569"}}>END</span>
+              <span style={{...hdrDateStyle, color:"#f87171", cursor:"default", display:"inline-block"}}>
+                {toISO(projectEnd)}
+              </span>
+              <span style={{color:"#1e3a5f", fontSize:11}}>|</span>
+              <span style={{fontSize:10, color:"#34d399"}}>{raw.projectEnd+1} cal. days</span>
+              <span style={{color:"#1e3a5f", fontSize:11}}>|</span>
+              <span style={{fontSize:10, color:"#f87171"}}>CP: {critPath}</span>
+            </div>
+          </div>
+
+          {/* Tab switcher + action buttons */}
+          <div style={{display:"flex", gap:6, alignSelf:"center", flexWrap:"wrap"}}>
+            {[["gantt","📊 Gantt"],["pert","🕸 PERT-CPM"]].map(([key,label])=>(
+              <button key={key} onClick={()=>setTab(key)} style={{
+                padding:"8px 18px", fontFamily:"inherit", fontSize:12, cursor:"pointer",
+                background: tab===key?"#1d4ed8":"#0f172a",
+                color:      tab===key?"#fff":"#64748b",
+                border:     tab===key?"1px solid #3b82f6":"1px solid #1e3a5f",
+                borderRadius:6, fontWeight: tab===key?700:400, transition:"all 0.2s",
+              }}>{label}</button>
+            ))}
+
+            <span style={{width:1, background:"#1e3a5f", alignSelf:"stretch", margin:"2px 4px"}}/>
+
+            <button data-no-print onClick={handleSaveChanges}
+              title="Download a self-contained HTML snapshot with your current changes"
+              style={{
+                padding:"8px 16px", fontFamily:"inherit", fontSize:12, cursor:"pointer",
+                background:"#14532d", color:"#86efac",
+                border:"1px solid #166534", borderRadius:6, fontWeight:600,
+                transition:"all 0.2s", display:"flex", alignItems:"center", gap:5,
+              }}>
+              💾 Save Changes
+              {saveMsg && <span style={{color:"#4ade80", fontSize:11}}> {saveMsg}</span>}
+            </button>
+
+            <button data-no-print onClick={handleDownloadPDF}
+              title="Print / Save as PDF — captures the full chart width"
+              style={{
+                padding:"8px 16px", fontFamily:"inherit", fontSize:12, cursor:"pointer",
+                background:"#1e1b4b", color:"#a5b4fc",
+                border:"1px solid #3730a3", borderRadius:6, fontWeight:600,
+                transition:"all 0.2s",
+              }}>
+              📄 Download PDF
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ── TAB CONTENT ── */}
+      {tab === "pert"
+        ? <PertTab  tasks={tasks} setTasks={setTasks} projectStart={projectStart}/>
+        : <GanttTab tasks={tasks} setTasks={setTasks} projectStart={projectStart}/>
+      }
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
