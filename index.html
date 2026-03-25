@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>NHMFC RMBS</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700;800&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'IBM Plex Mono',monospace;background:#060d1a;color:#e2e8f0;min-height:100vh;}
+  input,button,select{font-family:'IBM Plex Mono',monospace;}
+  button{cursor:pointer;}
+
+  /* ── ACCESS GATE ── */
+  #access-gate{
+    position:fixed;inset:0;background:#030810;z-index:9999;
+    display:flex;align-items:center;justify-content:center;
+  }
+  .gate-box{
+    background:#070f1e;border:1px solid #1e3a5f;border-radius:12px;
+    padding:40px 48px;width:400px;max-width:95vw;text-align:center;
+  }
+  .gate-logo{font-size:28px;font-weight:800;color:#60a5fa;letter-spacing:2px;word-spacing:-4px;margin-bottom:4px;}
+  .gate-sub{font-size:10px;color:#334155;letter-spacing:2px;margin-bottom:32px;}
+  .gate-tabs{display:flex;gap:0;margin-bottom:28px;border:1px solid #1e3a5f;border-radius:6px;overflow:hidden;}
+  .gate-tab{flex:1;padding:8px;background:none;border:none;color:#64748b;font-size:11px;font-weight:700;letter-spacing:1px;transition:all 0.2s;}
+  .gate-tab.active{background:#1d4ed8;color:#fff;}
+  .gate-field{margin-bottom:14px;text-align:left;}
+  .gate-field label{display:block;font-size:9px;color:#475569;letter-spacing:1px;margin-bottom:5px;}
+  .gate-field input{
+    width:100%;padding:9px 12px;background:#0f172a;border:1px solid #1e3a5f;
+    border-radius:5px;color:#e2e8f0;font-size:12px;font-family:'IBM Plex Mono',monospace;outline:none;
+    transition:border-color 0.2s;
+  }
+  .gate-field input:focus{border-color:#3b82f6;}
+  .gate-btn{
+    width:100%;padding:11px;background:#1d4ed8;color:#fff;border:none;border-radius:6px;
+    font-size:12px;font-weight:700;letter-spacing:1px;margin-top:6px;transition:background 0.2s;
+  }
+  .gate-btn:hover{background:#2563eb;}
+  .gate-err{color:#f87171;font-size:10px;margin-top:10px;min-height:16px;}
+  .gate-hint{font-size:9px;color:#1e3a5f;margin-top:16px;line-height:1.6;}
+
+  /* ── MAIN APP ── */
+  #app{display:none;}
+  #app.visible{display:block;}
+
+  /* ── HEADER ── */
+  #hdr{padding:14px 24px;background:#050b14;border-bottom:1px solid #0f2a4a;}
+  .hdr-row1{display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:14px;}
+  .hdr-title{font-size:17px;font-weight:800;color:#60a5fa;letter-spacing:2px;cursor:text;
+    border-bottom:1px dashed #1e3a5f;padding-bottom:1px;}
+  .hdr-title:focus{outline:none;border-bottom-color:#3b82f6;}
+  .hdr-meta{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:8px;}
+  .hdr-meta span{font-size:10px;}
+  .hdr-btns{display:flex;gap:6px;align-self:center;flex-wrap:wrap;}
+
+  .tab-btn{
+    padding:8px 18px;font-family:inherit;font-size:12px;
+    background:#0f172a;color:#64748b;border:1px solid #1e3a5f;
+    border-radius:6px;font-weight:400;transition:all 0.2s;
+  }
+  .tab-btn.active{background:#1d4ed8;color:#fff;border-color:#3b82f6;font-weight:700;}
+  .action-btn{
+    padding:8px 16px;font-family:inherit;font-size:12px;
+    border-radius:6px;font-weight:600;transition:all 0.2s;border:none;
+  }
+  .btn-save{background:#14532d;color:#86efac;border:1px solid #166534!important;}
+  .btn-pdf{background:#1e1b4b;color:#a5b4fc;border:1px solid #3730a3!important;}
+  .btn-lock{background:#1c1917;color:#a8a29e;border:1px solid #44403c!important;}
+  .divider{width:1px;background:#1e3a5f;margin:2px 4px;align-self:stretch;}
+
+  /* ── TAB BAR ── */
+  .sub-bar{
+    padding:8px 24px;border-bottom:1px solid #0f2a4a;
+    display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;
+  }
+  .sub-info{font-size:11px;color:#64748b;}
+  .zoom-group{display:flex;gap:4px;align-items:center;}
+  .zoom-label{font-size:10px;color:#475569;margin-right:2px;}
+  .zoom-btn{
+    padding:3px 8px;font-size:9px;background:#0f172a;color:#64748b;
+    border:1px solid #1e3a5f;border-radius:3px;transition:all 0.15s;
+  }
+  .zoom-btn.active{background:#1d4ed8;color:#fff;border-color:#3b82f6;}
+  .toggle-ed{padding:6px 14px;background:#0f172a;color:#fff;border:1px solid #1e3a5f;border-radius:4px;font-size:11px;}
+
+  /* ── LEGEND ── */
+  .legend{padding:5px 24px;font-size:10px;color:#475569;display:flex;gap:16px;flex-wrap:wrap;}
+
+  /* ── GANTT ── */
+  #gantt-wrap{display:flex;overflow-x:hidden;}
+  #gantt-labels{background:#040a12;border-right:1px solid #0f2a4a;z-index:2;flex-shrink:0;}
+  #gantt-scroll{overflow-x:auto;flex-grow:1;}
+  #gantt-svg{display:block;background:#040a12;}
+
+  /* ── PERT ── */
+  #pert-svg-wrap{padding:8px 24px 32px;overflow:auto;}
+  #pert-svg{display:block;background:#040a12;border-radius:8px;border:1px solid #0f2a4a;}
+
+  /* ── EDITOR TABLE ── */
+  .ed-wrap{padding:12px 24px;border-bottom:1px solid #0f2a4a;overflow-x:auto;}
+  .ed-table{width:100%;border-collapse:collapse;font-size:11px;}
+  .ed-table th{padding:7px 10px;text-align:left;background:#091628;color:#60a5fa;border-bottom:1px solid #1e3a5f;white-space:nowrap;font-size:10px;}
+  .ed-table td{padding:5px 8px;border-bottom:1px solid #0f172a;}
+  .ed-inp{background:#0f172a;border:1px solid #1e3a5f;color:#e2e8f0;padding:3px 7px;border-radius:3px;font-size:10px;font-family:'IBM Plex Mono',monospace;width:100%;}
+  .ed-date{background:#0f172a;border:1px solid #1e3a5f;color:#93c5fd;padding:2px 5px;border-radius:3px;font-size:10px;font-family:'IBM Plex Mono',monospace;color-scheme:dark;}
+  .ed-ro{color:#475569;font-size:10px;}
+  .ed-del{background:none;border:none;color:#475569;font-size:12px;padding:0 4px;}
+  .add-btn{padding:5px 12px;background:#166534;color:white;border:1px solid #166534;border-radius:4px;font-size:10px;font-family:inherit;}
+  .ed-err{margin-left:10px;color:#f87171;font-size:10px;}
+
+  /* ── PDF progress overlay ── */
+  #pdf-overlay{
+    display:none;position:fixed;inset:0;background:rgba(3,8,16,0.88);z-index:8888;
+    align-items:center;justify-content:center;flex-direction:column;gap:14px;
+  }
+  #pdf-overlay.show{display:flex;}
+  #pdf-overlay p{color:#60a5fa;font-size:13px;letter-spacing:1px;}
+  .spinner{width:36px;height:36px;border:3px solid #1e3a5f;border-top-color:#3b82f6;border-radius:50%;animation:spin 0.8s linear infinite;}
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  /* ── Readonly mode overlay ── */
+  .readonly-badge{
+    position:fixed;bottom:16px;right:16px;background:#1c1917;border:1px solid #44403c;
+    color:#a8a29e;padding:6px 14px;border-radius:20px;font-size:10px;letter-spacing:1px;z-index:100;
+  }
+
+  /* date input */
+  input[type=date]{color-scheme:dark;}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════
+     ACCESS GATE
+════════════════════════════════════════════════════════════ -->
+<div id="access-gate">
+  <div class="gate-box">
+    <div class="gate-logo">NHMFC RMBS</div>
+    <div class="gate-sub">&nbsp;</div>
+
+    <div class="gate-tabs">
+      <button class="gate-tab active" id="tab-view" onclick="switchGateTab('view')">👁 VIEW</button>
+      <button class="gate-tab" id="tab-edit" onclick="switchGateTab('edit')">✏️ EDIT</button>
+    </div>
+
+    <div class="gate-field">
+      <label>PASSWORD</label>
+      <input type="password" id="gate-pw" placeholder="Enter password…" onkeydown="if(event.key==='Enter')tryLogin()"/>
+    </div>
+
+    <button class="gate-btn" onclick="tryLogin()">ENTER</button>
+    <div class="gate-err" id="gate-err"></div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     PDF PROGRESS OVERLAY
+════════════════════════════════════════════════════════════ -->
+<div id="pdf-overlay">
+  <div class="spinner"></div>
+  <p id="pdf-status">Capturing page…</p>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════
+     MAIN APP
+════════════════════════════════════════════════════════════ -->
+<div id="app">
+
+  <!-- READONLY BADGE -->
+  <div class="readonly-badge" id="readonly-badge" style="display:none">👁 VIEW ONLY</div>
+
+  <!-- HEADER -->
+  <div id="hdr">
+    <div class="hdr-row1">
+      <div>
+        <div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;">
+          <span contenteditable="true" id="proj-title" class="hdr-title"
+            onblur="titleChanged()" onkeydown="if(event.key==='Enter'){event.preventDefault();this.blur();}">
+            NHMFC RMBS
+          </span>
+          <span style="font-size:11px;color:#334155;cursor:pointer;" onclick="document.getElementById('proj-title').focus()">✎</span>
+        </div>
+        <div class="hdr-meta">
+          <span style="color:#475569;">START</span>
+          <input type="date" id="start-date" style="background:#0a1628;border:1px solid #1e3a5f;color:#93c5fd;font-family:'IBM Plex Mono',monospace;font-size:11px;border-radius:4px;padding:3px 7px;outline:none;color-scheme:dark;" onchange="onStartChange(this.value)"/>
+          <span style="color:#1e3a5f;">→</span>
+          <span style="color:#475569;">END</span>
+          <span id="proj-end" style="background:#0a1628;border:1px solid #1e3a5f;color:#f87171;font-family:'IBM Plex Mono',monospace;font-size:11px;border-radius:4px;padding:3px 7px;display:inline-block;"></span>
+          <span style="color:#1e3a5f;font-size:11px;">|</span>
+          <span id="proj-days" style="color:#34d399;"></span>
+          <span style="color:#1e3a5f;font-size:11px;">|</span>
+          <span id="crit-path" style="color:#f87171;"></span>
+        </div>
+      </div>
+
+      <div class="hdr-btns" data-no-print>
+        <button class="tab-btn active" id="btn-gantt" onclick="switchTab('gantt')">📊 Gantt</button>
+        <button class="tab-btn" id="btn-pert" onclick="switchTab('pert')">🕸 PERT-CPM</button>
+        <div class="divider"></div>
+        <button class="action-btn btn-save" id="save-btn" onclick="saveChanges()">💾 Save Changes</button>
+        <button class="action-btn btn-pdf" onclick="downloadPDF()">📄 Download PDF</button>
+        <button class="action-btn btn-lock" onclick="lockApp()" title="Logout">🔒 Logout</button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- GANTT TAB -->
+  <div id="tab-gantt">
+    <div class="sub-bar">
+      <div class="sub-info">
+        ✏️ Edit tasks below — bars animate instantly &nbsp;·&nbsp;
+        <span style="color:#22d3ee;" id="today-label"></span>
+        &nbsp;·&nbsp;End: <span style="color:#f87171;" id="gantt-end-label"></span>
+        &nbsp;·&nbsp;<span style="color:#34d399;" id="gantt-days-label"></span>
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <span class="zoom-label">Zoom</span>
+        <button class="zoom-btn" onclick="setGanttZoom(0.6)">−−</button>
+        <button class="zoom-btn active" id="gz-1" onclick="setGanttZoom(1)">1×</button>
+        <button class="zoom-btn" id="gz-1.5" onclick="setGanttZoom(1.5)">1.5×</button>
+        <button class="zoom-btn" id="gz-2.5" onclick="setGanttZoom(2.5)">2×</button>
+        <button class="toggle-ed" onclick="toggleEditor('gantt')">▲ Hide Editor</button>
+      </div>
+    </div>
+    <div id="gantt-ed-wrap" class="ed-wrap">
+      <div id="gantt-table-wrap"></div>
+    </div>
+    <div class="legend">
+      <span>■ <span style="color:#ef4444;">CRITICAL</span></span>
+      <span>■ <span style="color:#f59e0b;">NEAR-CRIT</span></span>
+      <span>■ <span style="color:#3b82f6;">NON-CRIT</span></span>
+      <span style="color:#334155;">░ = float &nbsp; │ = today</span>
+    </div>
+    <div id="gantt-wrap" style="display:flex;overflow-x:hidden;">
+      <div id="gantt-labels" style="min-width:220px;flex-shrink:0;background:#040a12;border-right:1px solid #0f2a4a;z-index:2;"></div>
+      <div id="gantt-scroll" style="overflow-x:auto;flex-grow:1;">
+        <svg id="gantt-svg" style="display:block;background:#040a12;"></svg>
+      </div>
+    </div>
+  </div>
+
+  <!-- PERT TAB -->
+  <div id="tab-pert" style="display:none;">
+    <div class="sub-bar">
+      <div class="sub-info">
+        ✏️ Edit <strong style="color:#93c5fd;">End Date</strong> to change duration · Edit <strong style="color:#93c5fd;">Predecessors</strong> to rewire the network
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;">
+        <span class="zoom-label">Zoom</span>
+        <button class="zoom-btn" onclick="setPertZoom(0.6)">−−</button>
+        <button class="zoom-btn active" id="pz-1" onclick="setPertZoom(1)">1×</button>
+        <button class="zoom-btn" id="pz-1.5" onclick="setPertZoom(1.5)">1.5×</button>
+        <button class="zoom-btn" id="pz-2.5" onclick="setPertZoom(2.5)">2×</button>
+        <button class="toggle-ed" onclick="toggleEditor('pert')">▲ Hide Editor</button>
+      </div>
+    </div>
+    <div id="pert-ed-wrap" class="ed-wrap">
+      <div id="pert-table-wrap"></div>
+    </div>
+    <div style="padding:8px 24px 4px;font-size:10.5px;color:#475569;display:flex;gap:20px;flex-wrap:wrap;">
+      <span>● <span style="color:#ef4444;">RED = Critical (TF=0)</span></span>
+      <span>● <span style="color:#f59e0b;">AMBER = Near-Critical (TF≤1)</span></span>
+      <span>● <span style="color:#3b82f6;">BLUE = Non-Critical</span></span>
+      <span style="margin-left:auto;color:#334155;font-size:10px;">Start auto-adjusts · Edit End Date to set duration</span>
+    </div>
+    <div id="pert-svg-wrap" style="padding:8px 24px 32px;overflow:auto;">
+      <svg id="pert-svg" style="display:block;background:#040a12;border-radius:8px;border:1px solid #0f2a4a;"></svg>
+    </div>
+  </div>
+
+</div><!-- #app -->
+
+<script>
+// ═══════════════════════════════════════════════════
+//  STATE
+// ═══════════════════════════════════════════════════
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+const DEFAULT_PASSWORDS = { view: "viewerbonds", edit: "adminbonds" };
+let PASSWORDS = { view: "viewerbonds", edit: "adminbonds" };
+let accessMode = null; // "view" | "edit"
+
+let tasks = [
+  { id:"A", name:"Asset Pool Approval",                  predecessors:[],         duration:1   },
+  { id:"B", name:"Engagement of Transaction Parties",    predecessors:["A"],      duration:14  },
+  { id:"C", name:"Financial Structure",                  predecessors:["B"],      duration:93  },
+  { id:"D", name:"Board Approval",                       predecessors:["C"],      duration:91  },
+  { id:"E", name:"DHSUD Certification",                  predecessors:["D"],      duration:95  },
+  { id:"F", name:"Signing / SPT Agreement",              predecessors:["E"],      duration:1   },
+  { id:"G", name:"BSP Endorsement",                      predecessors:["F"],      duration:22  },
+  { id:"H", name:"Final Credit Rating & SEC Submission", predecessors:["B"],      duration:330 },
+  { id:"I", name:"SEC Approval",                         predecessors:["G","H"],  duration:71  },
+  { id:"J", name:"Marketing of RMBS",                    predecessors:["I"],      duration:68  },
+  { id:"K", name:"Bond Issuance",                        predecessors:["J"],      duration:1   },
+];
+
+let projectStart = new Date(2026, 4, 13); // May 13, 2026
+let ganttZoom    = 1;
+let pertZoom     = 1;
+let currentTab   = "gantt";
+let gateMode     = "view"; // which tab is selected on gate
+
+// ═══════════════════════════════════════════════════
+//  DATE HELPERS
+// ═══════════════════════════════════════════════════
+function isValidDate(d){ return d instanceof Date && !isNaN(d.getTime()); }
+function addDays(d,n){
+  if(!isValidDate(d)||n==null||isNaN(n)) return new Date(d);
+  const r=new Date(d); r.setDate(r.getDate()+n); return r;
+}
+function diffDays(a,b){ return Math.round((b-a)/86400000); }
+function fmtLong(d){ if(!isValidDate(d))return"—"; return `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`; }
+function fmtShort(d){ if(!isValidDate(d))return"—"; return `${MONTH_NAMES[d.getMonth()].slice(0,3)} ${d.getDate()}`; }
+function toISO(d){ if(!isValidDate(d))return""; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function fromISO(s){ const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); }
+
+// ═══════════════════════════════════════════════════
+//  CPM ENGINE
+// ═══════════════════════════════════════════════════
+function computeCPM(tasks, projectStart){
+  const map = Object.fromEntries(tasks.map(t=>[t.id,t]));
+  const ids  = tasks.map(t=>t.id);
+  const es={}, ef={}, ls={}, lf={}, tf={}, ff={}, lvl={};
+  ids.forEach(id=>{ es[id]=0; ef[id]=0; });
+
+  const visited=new Set(), inStack=new Set(), order=[];
+  function visit(id){
+    if(visited.has(id)||inStack.has(id)) return;
+    inStack.add(id);
+    (map[id]?.predecessors||[]).forEach(p=>{ if(map[p]) visit(p); });
+    inStack.delete(id);
+    visited.add(id);
+    order.push(id);
+  }
+  ids.forEach(visit);
+
+  order.forEach(id=>{
+    const preds=(map[id].predecessors||[]).filter(p=>map[p]&&ef[p]!=null);
+    es[id]=preds.length===0?0:Math.max(...preds.map(p=>ef[p]+1));
+    ef[id]=es[id]+(map[id].duration||1)-1;
+  });
+
+  const projectEnd=ids.length?Math.max(...ids.map(id=>ef[id]??0)):0;
+  const succ=Object.fromEntries(ids.map(id=>[id,[]]));
+  tasks.forEach(t=>(t.predecessors||[]).forEach(p=>{ if(succ[p]) succ[p].push(t.id); }));
+
+  [...order].reverse().forEach(id=>{
+    const s=succ[id].filter(x=>map[x]);
+    lf[id]=s.length===0?projectEnd:Math.min(...s.map(x=>ls[x]-1));
+    ls[id]=lf[id]-(map[id].duration||1)+1;
+  });
+
+  ids.forEach(id=>{
+    tf[id]=(ls[id]??0)-(es[id]??0);
+    const s=succ[id].filter(x=>map[x]);
+    ff[id]=s.length===0?tf[id]:Math.min(...s.map(x=>es[x]))-ef[id]-1;
+  });
+
+  order.forEach(id=>{
+    const preds=(map[id].predecessors||[]).filter(p=>map[p]);
+    lvl[id]=preds.length===0?0:Math.max(...preds.map(p=>lvl[p]??0))+1;
+  });
+
+  const startDate=id=>addDays(projectStart,es[id]??0);
+  const endDate  =id=>addDays(projectStart,ef[id]??0);
+
+  return { es,ef,ls,lf,tf,ff,lvl,projectEnd,succ,startDate,endDate };
+}
+
+function taskColor(tf){
+  const v=tf??0;
+  if(v===0) return { bar:"#ef4444",hd:"#7f1d1d",bg:"#991b1b",badge:"#ef4444",label:"CRITICAL"  };
+  if(v<=1)  return { bar:"#f59e0b",hd:"#78350f",bg:"#92400e",badge:"#f59e0b",label:"NEAR-CRIT" };
+  return           { bar:"#3b82f6",hd:"#1e3a8a",bg:"#1e3a8a",badge:"#3b82f6",label:"NON-CRIT"  };
+}
+
+function badgeStyle(v){
+  const bg=v===0?"#7f1d1d":v<=1?"#78350f":"#1e3a8a";
+  const fg=v===0?"#fca5a5":v<=1?"#fcd34d":"#93c5fd";
+  return `display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700;background:${bg};color:${fg};`;
+}
+
+// ═══════════════════════════════════════════════════
+//  ACCESS GATE
+// ═══════════════════════════════════════════════════
+function switchGateTab(mode){
+  gateMode=mode;
+  document.querySelectorAll('.gate-tab').forEach(b=>b.classList.remove('active'));
+  document.getElementById('tab-'+mode).classList.add('active');
+  document.getElementById('gate-err').textContent='';
+}
+
+function tryLogin(){
+  const pw=document.getElementById('gate-pw').value;
+  if(gateMode==='view' && pw===PASSWORDS.view){
+    accessMode='view'; enterApp();
+  } else if(gateMode==='edit' && pw===PASSWORDS.edit){
+    accessMode='edit'; enterApp();
+  } else {
+    document.getElementById('gate-err').textContent='Incorrect password. Try again.';
+    document.getElementById('gate-pw').value='';
+  }
+}
+
+function enterApp(){
+  document.getElementById('access-gate').style.display='none';
+  const app=document.getElementById('app');
+  app.classList.add('visible');
+
+  const isView = accessMode==='view';
+  document.getElementById('readonly-badge').style.display = isView ? 'block' : 'none';
+  document.getElementById('save-btn').style.display       = isView ? 'none'  : '';
+  document.getElementById('proj-title').contentEditable   = isView ? 'false' : 'true';
+  document.getElementById('start-date').disabled          = isView;
+
+  init();
+}
+
+function lockApp(){
+  accessMode=null;
+  document.getElementById('gate-pw').value='';
+  document.getElementById('gate-err').textContent='';
+  document.getElementById('access-gate').style.display='flex';
+  document.getElementById('app').classList.remove('visible');
+}
+
+
+// ═══════════════════════════════════════════════════
+//  INIT & RENDER
+// ═══════════════════════════════════════════════════
+function init(){
+  const sd=document.getElementById('start-date');
+  if(sd) sd.value=toISO(projectStart);
+  render();
+}
+
+function render(){
+  if(!accessMode) return; // don't render before login
+  const cpm=computeCPM(tasks,projectStart);
+  updateHeader(cpm);
+  if(currentTab==='gantt') renderGantt(cpm);
+  else renderPert(cpm);
+}
+
+function onStartChange(val){
+  if(val) projectStart=fromISO(val);
+  render();
+}
+
+function titleChanged(){
+  // title is inline editable, nothing else needed
+}
+
+function updateHeader(cpm){
+  const end=addDays(projectStart,cpm.projectEnd);
+  const el=id=>document.getElementById(id);
+  if(el('proj-end'))       el('proj-end').textContent=toISO(end);
+  if(el('proj-days'))      el('proj-days').textContent=`${cpm.projectEnd+1} cal. days`;
+  const cp=tasks.filter(t=>cpm.tf[t.id]===0).sort((a,b)=>cpm.es[a.id]-cpm.es[b.id]).map(t=>t.id).join(' → ');
+  if(el('crit-path'))      el('crit-path').textContent=`CP: ${cp}`;
+  const today=new Date();
+  if(el('today-label'))    el('today-label').textContent=`TODAY: ${fmtShort(today)}`;
+  if(el('gantt-end-label'))el('gantt-end-label').textContent=fmtLong(end);
+  if(el('gantt-days-label'))el('gantt-days-label').textContent=`${cpm.projectEnd+1} cal. days`;
+}
+
+// ─── Tab switching ────────────────────────────────
+function switchTab(tab){
+  currentTab=tab;
+  document.getElementById('tab-gantt').style.display=tab==='gantt'?'block':'none';
+  document.getElementById('tab-pert').style.display=tab==='pert'?'block':'none';
+  document.getElementById('btn-gantt').classList.toggle('active',tab==='gantt');
+  document.getElementById('btn-pert').classList.toggle('active',tab==='pert');
+  render();
+}
+
+// ─── Editor toggle ─────────────────────────────────
+function toggleEditor(which){
+  const wrap=document.getElementById(which+'-ed-wrap');
+  const btn=wrap.parentElement.querySelector('.toggle-ed');
+  const hidden=wrap.style.display==='none';
+  wrap.style.display=hidden?'block':'none';
+  btn.textContent=hidden?'▲ Hide Editor':'▼ Show Editor';
+}
+
+// ═══════════════════════════════════════════════════
+//  EDITOR TABLE
+// ═══════════════════════════════════════════════════
+function renderEditor(containerId, mode, cpm){
+  const isEdit=accessMode==='edit';
+  const showCPM=mode==='pert';
+  const container=document.getElementById(containerId);
+
+  let html=`<div style="overflow-x:auto;"><table class="ed-table"><thead><tr>
+    <th>ID</th><th>Task Name</th><th>Predecessors</th>
+    <th>Start (auto)</th><th>End Date ✎</th><th>Cal Days</th>`;
+  if(showCPM) html+=`<th>ES</th><th>EF</th><th>LS</th><th>LF</th>`;
+  html+=`<th>TF</th><th>FF</th><th>Type</th>${isEdit?'<th></th>':''}</tr></thead><tbody>`;
+
+  tasks.forEach(t=>{
+    const tfVal=cpm.tf[t.id]??0;
+    const c=taskColor(tfVal);
+    const sd=cpm.startDate(t.id), ed=cpm.endDate(t.id);
+    html+=`<tr style="background:#060d1a;">
+      <td style="padding:5px 8px;">${isEdit
+        ? `<input class="ed-inp" style="width:44px;font-weight:800;color:${c.badge};" value="${escHtml(t.id)}" onblur="updateTaskId('${t.id}',this.value)" onkeydown="if(event.key==='Enter')this.blur()" oninput="this.value=this.value.toUpperCase()"/>`
+        : `<span style="font-weight:800;color:${c.badge};">${t.id}</span>`
+      }</td>
+      <td style="padding:5px 8px;">${isEdit?`<input class="ed-inp" style="width:160px;" value="${escHtml(t.name)}" onchange="updateTask('${t.id}','name',this.value)"/>`:`<span style="color:#cbd5e1;font-size:10px;">${escHtml(t.name)}</span>`}</td>
+      <td style="padding:5px 8px;">${isEdit?`<input class="ed-inp" style="width:70px;" value="${t.predecessors.join(',')}" onblur="updateTask('${t.id}','predecessors',this.value)" onkeydown="if(event.key==='Enter')this.blur()"/>`:`<span class="ed-ro">${t.predecessors.join(',')||'—'}</span>`}</td>
+      <td style="color:#475569;font-size:10px;white-space:nowrap;padding:5px 8px;">${fmtShort(sd)}</td>
+      <td style="padding:5px 8px;">${isEdit?`<input type="date" class="ed-date" value="${toISO(ed)}" min="${toISO(sd)}" onchange="updateTaskEndDate('${t.id}',this.value)"/>`:`<span class="ed-ro">${toISO(ed)}</span>`}</td>
+      <td style="color:#475569;font-size:10px;text-align:center;padding:5px 8px;">${t.duration}</td>`;
+    if(showCPM) html+=`<td class="ed-ro" style="padding:5px 8px;">${cpm.es[t.id]??0}</td><td class="ed-ro" style="padding:5px 8px;">${cpm.ef[t.id]??0}</td><td class="ed-ro" style="padding:5px 8px;">${cpm.ls[t.id]??0}</td><td class="ed-ro" style="padding:5px 8px;">${cpm.lf[t.id]??0}</td>`;
+    html+=`<td style="padding:5px 8px;"><span style="${badgeStyle(tfVal)}">${tfVal}d</span></td>
+      <td class="ed-ro" style="padding:5px 8px;">${cpm.ff[t.id]??0}d</td>
+      <td style="padding:5px 8px;"><span style="${badgeStyle(tfVal)}">${c.label}</span></td>
+      ${isEdit?`<td style="padding:5px 8px;"><button class="ed-del" onclick="removeTask('${t.id}')">✕</button></td>`:''}
+    </tr>`;
+  });
+
+  if(isEdit){
+    html+=`<tr style="background:#040a12;" id="add-row-${mode}">
+      <td style="padding:5px 8px;"><input class="ed-inp" style="width:36px;" id="nr-id-${mode}" placeholder="ID" oninput="this.value=this.value.toUpperCase()"/></td>
+      <td style="padding:5px 8px;"><input class="ed-inp" id="nr-name-${mode}" placeholder="Task name"/></td>
+      <td style="padding:5px 8px;"><input class="ed-inp" style="width:80px;" id="nr-pred-${mode}" placeholder="e.g. A,B" oninput="this.value=this.value.toUpperCase()"/></td>
+      <td colspan="${showCPM?8:4}" style="padding:5px 8px;">
+        <button class="add-btn" onclick="addTask('${mode}')">+ Add Task</button>
+        <span class="ed-err" id="add-err-${mode}"></span>
+      </td>
+      <td></td>
+    </tr>`;
+  }
+
+  html+=`</tbody></table></div>`;
+  container.innerHTML=html;
+}
+
+function escHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+function updateTaskId(oldId, newId){
+  newId = newId.trim().toUpperCase();
+  if(!newId || newId === oldId) { render(); return; }
+  if(tasks.find(t=>t.id===newId)){ alert(`ID "${newId}" already exists. Choose a different ID.`); render(); return; }
+  // Update the task's own ID and fix all predecessor references across all tasks
+  tasks = tasks.map(t=>({
+    ...t,
+    id: t.id===oldId ? newId : t.id,
+    predecessors: t.predecessors.map(p => p===oldId ? newId : p)
+  }));
+  render();
+}
+
+
+function updateTask(id, field, val){
+  tasks=tasks.map(t=>{
+    if(t.id!==id) return t;
+    if(field==='predecessors')
+      return {...t, predecessors:val.split(',').map(s=>s.trim().toUpperCase()).filter(Boolean)};
+    return {...t,[field]:val};
+  });
+  render();
+}
+
+function updateTaskEndDate(id, val){
+  const cpm=computeCPM(tasks,projectStart);
+  const sd=cpm.startDate(id);
+  const end=fromISO(val);
+  const dur=Math.max(1,diffDays(sd,end)+1);
+  tasks=tasks.map(t=>t.id===id?{...t,duration:dur}:t);
+  render();
+}
+
+function removeTask(id){
+  tasks=tasks.filter(t=>t.id!==id).map(t=>({...t,predecessors:t.predecessors.filter(p=>p!==id)}));
+  render();
+}
+
+function addTask(mode){
+  const id=document.getElementById('nr-id-'+mode).value.trim().toUpperCase();
+  const name=document.getElementById('nr-name-'+mode).value.trim();
+  const predsRaw=document.getElementById('nr-pred-'+mode).value.trim().toUpperCase();
+  const errEl=document.getElementById('add-err-'+mode);
+  if(!id){ errEl.textContent='ID required'; return; }
+  if(tasks.find(t=>t.id===id)){ errEl.textContent=`"${id}" already exists`; return; }
+  const preds=predsRaw.split(',').map(s=>s.trim()).filter(Boolean);
+  tasks=[...tasks,{id,name:name||id,predecessors:preds,duration:1}];
+  errEl.textContent='';
+  render();
+}
+
+// ═══════════════════════════════════════════════════
+//  GANTT CHART
+// ═══════════════════════════════════════════════════
+function setGanttZoom(z){
+  ganttZoom=z;
+  document.querySelectorAll('[id^="gz-"]').forEach(b=>b.classList.remove('active'));
+  const key=z===0.6?'0.6':String(z);
+  const btn=document.getElementById('gz-'+key);
+  if(btn) btn.classList.add('active');
+  const cpm=computeCPM(tasks,projectStart);
+  renderGantt(cpm);
+}
+
+function renderGantt(cpm){
+  renderEditor('gantt-table-wrap','gantt',cpm);
+
+  const today=new Date();
+  const totalDays=Math.max(cpm.projectEnd+80,1);
+  const pxPerDay=1.4*ganttZoom;
+  const chartW=totalDays*pxPerDay;
+  const ROW_H=38, HDR_H=56, LABEL_W=220;
+  const chartH=HDR_H+tasks.length*ROW_H+20;
+  const todayOff=diffDays(projectStart,today);
+  const scanX=todayOff*pxPerDay;
+
+  // Month headers
+  const months=[];
+  let cur=new Date(projectStart.getFullYear(),projectStart.getMonth(),1);
+  while(diffDays(projectStart,cur)<totalDays){
+    const next=new Date(cur.getFullYear(),cur.getMonth()+1,1);
+    const x=Math.max(0,diffDays(projectStart,cur))*pxPerDay;
+    const w=diffDays(cur,next)*pxPerDay;
+    months.push({label:`${MONTH_NAMES[cur.getMonth()]} ${cur.getFullYear()}`,x,w});
+    cur=next;
+  }
+  const weeks=[];
+  let wd=new Date(projectStart);
+  while(diffDays(projectStart,wd)<totalDays){
+    weeks.push({x:diffDays(projectStart,wd)*pxPerDay,label:wd.getDate()});
+    wd=addDays(wd,7);
+  }
+
+  // Labels panel
+  const labelsEl=document.getElementById('gantt-labels');
+  if(!labelsEl) return;
+  let labHtml=`<div style="height:${HDR_H}px;border-bottom:1px solid #1e3a5f;display:flex;align-items:flex-end;padding:0 0 6px 14px;"><span style="font-size:10px;color:#475569;font-family:'IBM Plex Mono',monospace;">TASK</span></div>`;
+  tasks.forEach((t,i)=>{
+    const c=taskColor(cpm.tf[t.id]);
+    const bg=i%2===0?'#040a12':'#060d1a';
+    labHtml+=`<div style="height:${ROW_H}px;display:flex;align-items:center;padding:0 12px;border-bottom:1px solid #091628;background:${bg};gap:8px;">
+      <span style="font-weight:800;color:${c.badge};font-family:'IBM Plex Mono',monospace;font-size:11px;min-width:18px;">${t.id}</span>
+      <span style="color:#cbd5e1;font-size:10px;font-family:'IBM Plex Mono',monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escHtml(t.name)}</span>
+    </div>`;
+  });
+  labelsEl.style.minWidth=LABEL_W+'px';
+  labelsEl.innerHTML=labHtml;
+
+  // SVG chart
+  let svg=`<svg id="gantt-svg" width="${chartW}" height="${chartH}" style="display:block;background:#040a12;">
+  <defs>
+    <marker id="ga-c" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="rgba(239,68,68,0.6)"/></marker>
+    <marker id="ga-n" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="rgba(51,65,85,0.6)"/></marker>
+  </defs>`;
+
+  months.forEach((m,i)=>{
+    const fill=i%2===0?'#050c1a':'#060d1c';
+    svg+=`<rect x="${m.x}" y="0" width="${m.w}" height="28" fill="${fill}"/>
+    <text x="${m.x+m.w/2}" y="18" text-anchor="middle" fill="#60a5fa" font-size="10" font-family="'IBM Plex Mono',monospace" font-weight="700">${m.label}</text>
+    <line x1="${m.x}" y1="0" x2="${m.x}" y2="${chartH}" stroke="#0f172a" stroke-width="1"/>`;
+  });
+  weeks.forEach(w=>{
+    svg+=`<line x1="${w.x}" y1="28" x2="${w.x}" y2="${HDR_H}" stroke="#0f172a" stroke-width="1"/>
+    <text x="${w.x+2}" y="42" fill="#334155" font-size="8" font-family="'IBM Plex Mono',monospace">${w.label}</text>`;
+  });
+  svg+=`<line x1="0" y1="${HDR_H}" x2="${chartW}" y2="${HDR_H}" stroke="#1e3a5f" stroke-width="1"/>`;
+
+  tasks.forEach((t,i)=>{
+    const fill=i%2===0?'#040a12':'#060d1a';
+    svg+=`<rect x="0" y="${HDR_H+i*ROW_H}" width="${chartW}" height="${ROW_H}" fill="${fill}"/>`;
+  });
+
+  tasks.forEach(t=>(t.predecessors||[]).forEach(pred=>{
+    const pi=tasks.findIndex(tt=>tt.id===pred), ti=tasks.findIndex(tt=>tt.id===t.id);
+    if(pi<0||ti<0) return;
+    const x1=(cpm.ef[pred]+1)*pxPerDay, y1=HDR_H+pi*ROW_H+ROW_H/2;
+    const x2=cpm.es[t.id]*pxPerDay, y2=HDR_H+ti*ROW_H+ROW_H/2;
+    const isCrit=cpm.tf[pred]===0&&cpm.tf[t.id]===0;
+    const stroke=isCrit?'rgba(239,68,68,0.4)':'rgba(51,65,85,0.5)';
+    const dash=isCrit?'':'3,3';
+    svg+=`<path d="M${x1},${y1} C${x1+20},${y1} ${x2-20},${y2} ${x2},${y2}" fill="none" stroke="${stroke}" stroke-width="1.2" stroke-dasharray="${dash}" marker-end="url(#ga-${isCrit?'c':'n'})"/>`;
+  }));
+
+  tasks.forEach((t,i)=>{
+    const c=taskColor(cpm.tf[t.id]);
+    const x=cpm.es[t.id]*pxPerDay;
+    const w=Math.max(t.duration*pxPerDay,3);
+    const fW=Math.max(cpm.tf[t.id]*pxPerDay,0);
+    const y=HDR_H+i*ROW_H;
+    const bh=ROW_H-10;
+    svg+=`<g transform="translate(${x},${y+5})">`;
+    if(cpm.tf[t.id]>0) svg+=`<rect x="0" y="4" width="${w+fW}" height="${bh-8}" rx="2" fill="${c.bar}" opacity="0.13"/>`;
+    svg+=`<rect x="0" y="0" width="${w}" height="${bh}" rx="3" fill="${c.bar}"/>
+    <rect x="0" y="0" width="${w}" height="${bh/3}" rx="3" fill="rgba(255,255,255,0.13)"/>`;
+    if(w>50) svg+=`<text x="6" y="${bh/2+4}" fill="#fff" font-size="9" font-family="'IBM Plex Mono',monospace" font-weight="700">${t.duration}d</text>`;
+    svg+=`</g>`;
+  });
+
+  if(todayOff>=0&&todayOff<=totalDays){
+    svg+=`<line x1="${scanX}" y1="0" x2="${scanX}" y2="${chartH}" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.8"/>
+    <rect x="${scanX-18}" y="0" width="36" height="20" rx="3" fill="#22d3ee"/>
+    <text x="${scanX}" y="13" text-anchor="middle" fill="#000" font-size="8" font-family="'IBM Plex Mono',monospace" font-weight="800">TODAY</text>`;
+  }
+
+  svg+=`</svg>`;
+  const gs=document.getElementById('gantt-scroll');
+  if(gs) gs.innerHTML=svg;
+}
+
+// ═══════════════════════════════════════════════════
+//  PERT-CPM CHART
+// ═══════════════════════════════════════════════════
+const NW=170, NH=96, LGAP=230, RGAP=130;
+
+function setPertZoom(z){
+  pertZoom=z;
+  ['1','1.5','2.5'].forEach(v=>{
+    const b=document.getElementById('pz-'+v);
+    if(b) b.classList.remove('active');
+  });
+  const key=z===0.6?'0.6':String(z);
+  const btn=document.getElementById('pz-'+key);
+  if(btn) btn.classList.add('active');
+  const cpm=computeCPM(tasks,projectStart);
+  renderPert(cpm);
+}
+
+function computePertLayout(tasks, lvl){
+  const groups={};
+  tasks.forEach(t=>{ const l=lvl[t.id]??0; (groups[l]=groups[l]||[]).push(t.id); });
+  const pos={};
+  Object.entries(groups).forEach(([lv,ids])=>{
+    const x=parseInt(lv)*LGAP*pertZoom+40;
+    ids.forEach((id,i)=>{ pos[id]={x, y:40+i*RGAP*pertZoom}; });
+  });
+  const maxX=Math.max(...Object.values(pos).map(p=>p.x))+NW*pertZoom+60;
+  const maxY=Math.max(...Object.values(pos).map(p=>p.y))+NH*pertZoom+60;
+  return {pos,maxX,maxY};
+}
+
+function renderPert(cpm){
+  renderEditor('pert-table-wrap','pert',cpm);
+  const {pos,maxX,maxY}=computePertLayout(tasks,cpm.lvl);
+  const nw=NW*pertZoom, nh=NH*pertZoom;
+
+  let svg=`<svg id="pert-svg" width="${maxX}" height="${maxY}" style="display:block;background:#040a12;border-radius:8px;border:1px solid #0f2a4a;">
+  <defs>
+    <marker id="pa-c" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/></marker>
+    <marker id="pa-n" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#334155"/></marker>
+  </defs>`;
+
+  // Arrows
+  tasks.forEach(t=>(t.predecessors||[]).forEach(pred=>{
+    if(!pos[pred]||!pos[t.id]) return;
+    const isCrit=cpm.tf[pred]===0&&cpm.tf[t.id]===0;
+    const x1=pos[pred].x+nw, y1=pos[pred].y+nh/2;
+    const x2=pos[t.id].x,    y2=pos[t.id].y+nh/2;
+    const mx=(x1+x2)/2;
+    svg+=`<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"
+      fill="none" stroke="${isCrit?'#ef4444':'#334155'}"
+      stroke-width="${isCrit?2.5:1.5}" stroke-dasharray="${isCrit?'':'5,4'}"
+      marker-end="url(#pa-${isCrit?'c':'n'})"/>`;
+  }));
+
+  // Nodes
+  const fs=Math.max(7,10*pertZoom), fs2=Math.max(6,8.5*pertZoom), fsSmall=Math.max(5,7.5*pertZoom);
+  tasks.forEach(t=>{
+    if(!pos[t.id]) return;
+    const p=pos[t.id];
+    const c=taskColor(cpm.tf[t.id]);
+    const sd=cpm.startDate(t.id), ed=cpm.endDate(t.id);
+    const short=t.name.length>24?t.name.slice(0,22)+'…':t.name;
+    const hdrH=Math.round(22*pertZoom);
+    const line1=Math.round(55*pertZoom), line2=Math.round(71*pertZoom);
+    svg+=`<g transform="translate(${p.x},${p.y})">
+      <rect width="${nw}" height="${nh}" rx="5" fill="${c.bg}"/>
+      <rect width="${nw}" height="${hdrH}" rx="5" fill="${c.hd}"/>
+      <rect y="${hdrH-4}" width="${nw}" height="6" fill="${c.hd}"/>
+      <text x="${nw/2}" y="${Math.round(15*pertZoom)}" text-anchor="middle" fill="#fff" font-size="${fs}" font-weight="800" font-family="'IBM Plex Mono',monospace">${t.id}  ·  ${t.duration}d</text>
+      <text x="${nw/2}" y="${Math.round(35*pertZoom)}" text-anchor="middle" fill="rgba(255,255,255,.85)" font-size="${fs2}" font-family="'IBM Plex Mono',monospace">${escHtml(short)}</text>
+      <text x="8" y="${Math.round(51*pertZoom)}" fill="rgba(255,255,255,.55)" font-size="${fsSmall}" font-family="monospace">ES ${fmtShort(sd)}</text>
+      <text x="${nw-8}" y="${Math.round(51*pertZoom)}" text-anchor="end" fill="rgba(255,255,255,.55)" font-size="${fsSmall}" font-family="monospace">EF ${fmtShort(ed)}</text>
+      <line x1="0" y1="${line1}" x2="${nw}" y2="${line1}" stroke="rgba(255,255,255,.12)"/>
+      <text x="8" y="${Math.round(67*pertZoom)}" fill="rgba(255,255,255,.55)" font-size="${fsSmall}" font-family="monospace">LS ${cpm.ls[t.id]}</text>
+      <text x="${nw-8}" y="${Math.round(67*pertZoom)}" text-anchor="end" fill="rgba(255,255,255,.55)" font-size="${fsSmall}" font-family="monospace">LF ${cpm.lf[t.id]}</text>
+      <line x1="0" y1="${line2}" x2="${nw}" y2="${line2}" stroke="rgba(255,255,255,.12)"/>
+      <text x="${nw/2}" y="${Math.round(87*pertZoom)}" text-anchor="middle" fill="rgba(255,255,255,.9)" font-size="${Math.max(7,9*pertZoom)}" font-weight="700" font-family="monospace">TF=${cpm.tf[t.id]}d · FF=${cpm.ff[t.id]}d</text>
+    </g>`;
+  });
+
+  svg+=`</svg>`;
+  const pw=document.getElementById('pert-svg-wrap');
+  if(pw) pw.innerHTML=svg;
+}
+
+// ═══════════════════════════════════════════════════
+//  SAVE (download JSON snapshot)
+// ═══════════════════════════════════════════════════
+function saveChanges(){
+  const snapshot={
+    title: document.getElementById('proj-title').textContent.trim(),
+    projectStart: toISO(projectStart),
+    tasks
+  };
+  const blob=new Blob([JSON.stringify(snapshot,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a');
+  a.href=url;
+  a.download=`NHMFC_Bonds_Saved_${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  const btn=document.getElementById('save-btn');
+  const orig=btn.textContent;
+  btn.textContent='💾 Saved! ✔';
+  setTimeout(()=>btn.textContent=orig,2000);
+}
+
+// ═══════════════════════════════════════════════════
+//  PDF EXPORT — full page image capture
+// ═══════════════════════════════════════════════════
+async function downloadPDF(){
+  const overlay=document.getElementById('pdf-overlay');
+  const status=document.getElementById('pdf-status');
+  overlay.classList.add('show');
+
+  // Hide buttons & overlays from capture
+  const noPrint=document.querySelectorAll('[data-no-print], #readonly-badge, #pdf-overlay');
+  noPrint.forEach(el=>{ el._prevDisplay=el.style.display; el.style.display='none'; });
+
+  try {
+    status.textContent='Capturing Gantt chart…';
+    await switchTabForPDF('gantt');
+    const ganttCanvas=await html2canvas(document.getElementById('app'),{
+      backgroundColor:'#060d1a', scale:1.5, useCORS:true, logging:false,
+      windowWidth: document.getElementById('app').scrollWidth,
+      windowHeight: document.getElementById('app').scrollHeight,
+    });
+
+    status.textContent='Capturing PERT-CPM chart…';
+    await switchTabForPDF('pert');
+    const pertCanvas=await html2canvas(document.getElementById('app'),{
+      backgroundColor:'#060d1a', scale:1.5, useCORS:true, logging:false,
+      windowWidth: document.getElementById('app').scrollWidth,
+      windowHeight: document.getElementById('app').scrollHeight,
+    });
+
+    status.textContent='Building PDF…';
+    const {jsPDF}=window.jspdf;
+
+    // Page 1: Gantt
+    const g_w=ganttCanvas.width, g_h=ganttCanvas.height;
+    const p1=new jsPDF({ orientation: g_w>g_h?'l':'p', unit:'px', format:[g_w,g_h] });
+    p1.addImage(ganttCanvas,'PNG',0,0,g_w,g_h,'','FAST');
+
+    // Page 2: PERT
+    const p_w=pertCanvas.width, p_h=pertCanvas.height;
+    p1.addPage([p_w,p_h], p_w>p_h?'l':'p');
+    p1.addImage(pertCanvas,'PNG',0,0,p_w,p_h,'','FAST');
+
+    const title=document.getElementById('proj-title').textContent.trim()||'NHMFC_Bonds';
+    p1.save(`${title}_${new Date().toISOString().slice(0,10)}.pdf`);
+
+    // Restore tab
+    switchTabForPDF(currentTab);
+  } catch(e){
+    console.error(e);
+    alert('PDF export failed: '+e.message);
+  } finally {
+    noPrint.forEach(el=>{ el.style.display=el._prevDisplay||''; });
+    overlay.classList.remove('show');
+  }
+}
+
+async function switchTabForPDF(tab){
+  document.getElementById('tab-gantt').style.display=tab==='gantt'?'block':'none';
+  document.getElementById('tab-pert').style.display=tab==='pert'?'block':'none';
+  // give DOM time to paint
+  await new Promise(r=>setTimeout(r,300));
+}
+
+// ═══════════════════════════════════════════════════
+//  BOOT
+// ═══════════════════════════════════════════════════
+document.addEventListener('DOMContentLoaded', function(){
+  // Set zoom button IDs safely
+  const gz = document.querySelector('[onclick="setGanttZoom(0.6)"]');
+  const pz = document.querySelector('[onclick="setPertZoom(0.6)"]');
+  if(gz) gz.id='gz-0.6';
+  if(pz) pz.id='pz-0.6';
+
+  // Pre-set start date field
+  const sd = document.getElementById('start-date');
+  if(sd) sd.value = toISO(projectStart);
+
+  // Allow Enter key on gate password field
+  const gatePw = document.getElementById('gate-pw');
+  if(gatePw) gatePw.addEventListener('keydown', e=>{ if(e.key==='Enter') tryLogin(); });
+});
+
+</script>
+</body>
+</html>
