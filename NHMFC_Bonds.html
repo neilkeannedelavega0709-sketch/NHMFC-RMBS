@@ -1,0 +1,931 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>NHMFC Bonds 2026 — CPM Scheduler</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Space+Grotesk:wght@400;600;700&display=swap" rel="stylesheet"/>
+<style>
+  :root {
+    --bg:        #060d1a;
+    --bg2:       #050b14;
+    --bg3:       #040a12;
+    --bg4:       #0f172a;
+    --border:    #0f2a4a;
+    --border2:   #1e3a5f;
+    --text:      #e2e8f0;
+    --text-dim:  #64748b;
+    --text-mute: #334155;
+    --accent:    #60a5fa;
+    --accent2:   #93c5fd;
+    --green:     #34d399;
+    --red:       #ef4444;
+    --red-dim:   #fca5a5;
+    --amber:     #f59e0b;
+    --amber-dim: #fcd34d;
+    --blue:      #3b82f6;
+    --teal:      #22d3ee;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'Space Grotesk', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    font-family: var(--mono);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── HEADER ── */
+  #header {
+    padding: 14px 24px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    backdrop-filter: blur(8px);
+  }
+  .hdr-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 14px;
+  }
+  #title-wrap { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+  #title-display {
+    font-size: 17px; font-weight: 800; color: var(--accent);
+    letter-spacing: 2px; cursor: text;
+    border-bottom: 1px dashed var(--border2);
+    padding-bottom: 1px;
+  }
+  #title-display:hover { border-color: var(--accent); }
+  #title-input {
+    background: transparent; border: none;
+    border-bottom: 1px solid var(--blue);
+    color: var(--accent); font-family: var(--mono);
+    font-size: 17px; font-weight: 800; letter-spacing: 2px;
+    outline: none; padding: 0 2px;
+    display: none;
+  }
+  #edit-icon { font-size: 11px; color: var(--text-mute); cursor: pointer; user-select: none; }
+
+  .hdr-meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .hdr-label { font-size: 10px; color: var(--text-dim); }
+  .hdr-date-input {
+    background: #0a1628; border: 1px solid var(--border2);
+    color: var(--accent2); font-family: var(--mono); font-size: 11px;
+    border-radius: 4px; padding: 3px 7px; outline: none; color-scheme: dark;
+  }
+  .hdr-date-out {
+    background: #0a1628; border: 1px solid var(--border2);
+    color: var(--red); font-family: var(--mono); font-size: 11px;
+    border-radius: 4px; padding: 3px 7px; display: inline-block;
+  }
+  .hdr-sep { color: var(--border2); font-size: 11px; }
+  .hdr-stat-green { font-size: 10px; color: var(--green); }
+  .hdr-stat-red   { font-size: 10px; color: var(--red); }
+
+  /* ── BUTTON CLUSTER ── */
+  .btn-cluster { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+  .btn-divider { width: 1px; background: var(--border2); align-self: stretch; margin: 2px 4px; }
+
+  .btn-tab {
+    padding: 8px 18px; font-family: var(--mono); font-size: 12px;
+    cursor: pointer; border-radius: 6px; font-weight: 400;
+    transition: all 0.2s; background: var(--bg4);
+    color: var(--text-dim); border: 1px solid var(--border2);
+  }
+  .btn-tab.active {
+    background: #1d4ed8; color: #fff;
+    border-color: var(--blue); font-weight: 700;
+  }
+  .btn-save {
+    padding: 8px 16px; font-family: var(--mono); font-size: 12px;
+    cursor: pointer; background: #14532d; color: #86efac;
+    border: 1px solid #166534; border-radius: 6px; font-weight: 600;
+    transition: all 0.2s; display: flex; align-items: center; gap: 5px;
+  }
+  .btn-save:hover { background: #166534; }
+  .btn-pdf {
+    padding: 8px 16px; font-family: var(--mono); font-size: 12px;
+    cursor: pointer; background: #1e1b4b; color: #a5b4fc;
+    border: 1px solid #3730a3; border-radius: 6px; font-weight: 600;
+    transition: all 0.2s;
+  }
+  .btn-pdf:hover { background: #2e2b6b; }
+  #save-msg { color: #4ade80; font-size: 11px; }
+
+  /* ── TAB CONTENT ── */
+  #tab-content { overflow-x: hidden; }
+
+  /* ── TOOLBAR BAR ── */
+  .toolbar {
+    padding: 8px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+  .toolbar-hint { font-size: 11px; color: var(--text-dim); }
+  .toolbar-hint b { color: var(--accent2); }
+
+  .btn-sm {
+    padding: 5px 12px; font-family: var(--mono); font-size: 10px;
+    cursor: pointer; border-radius: 4px; transition: all 0.15s;
+    background: var(--bg4); color: #fff;
+    border: 1px solid var(--border2);
+  }
+  .btn-sm.active { background: #1d4ed8; border-color: var(--blue); }
+  .btn-sm.tog { padding: 6px 14px; font-size: 11px; }
+
+  /* ── LEGEND ── */
+  .legend {
+    padding: 5px 24px;
+    font-size: 10px; color: var(--text-dim);
+    display: flex; gap: 16px; flex-wrap: wrap;
+    font-family: var(--mono);
+  }
+  .leg-crit   { color: var(--red); }
+  .leg-near   { color: var(--amber); }
+  .leg-non    { color: var(--blue); }
+  .leg-hint   { color: var(--text-mute); margin-left: auto; }
+
+  /* ── TASK EDITOR ── */
+  .editor-wrap { padding: 10px 24px; border-bottom: 1px solid var(--border); }
+  .editor-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+  .editor-table th {
+    padding: 7px 10px; text-align: left;
+    background: #091628; color: var(--accent);
+    border-bottom: 1px solid var(--border2);
+    white-space: nowrap; font-size: 10px;
+  }
+  .editor-table td { padding: 5px 8px; border-bottom: 1px solid var(--bg); }
+  .editor-table tr:nth-child(odd) td { background: var(--bg); }
+  .editor-table tr:nth-child(even) td { background: #060d1a; }
+  .ed-inp {
+    background: var(--bg4); border: 1px solid var(--border2);
+    color: var(--text); padding: 3px 7px; border-radius: 3px;
+    font-size: 10px; font-family: var(--mono); width: 100%;
+    outline: none;
+  }
+  .ed-inp:focus { border-color: var(--blue); }
+  .ed-date {
+    background: var(--bg4); border: 1px solid var(--border2);
+    color: var(--accent2); padding: 2px 5px; border-radius: 3px;
+    font-size: 10px; font-family: var(--mono);
+    color-scheme: dark; outline: none;
+  }
+  .ed-date:focus { border-color: var(--blue); }
+  .badge-crit { display:inline-block; padding:1px 6px; border-radius:3px; font-size:9px; font-weight:700; background:#7f1d1d; color:#fca5a5; }
+  .badge-near { display:inline-block; padding:1px 6px; border-radius:3px; font-size:9px; font-weight:700; background:#78350f; color:#fcd34d; }
+  .badge-non  { display:inline-block; padding:1px 6px; border-radius:3px; font-size:9px; font-weight:700; background:#1e3a8a; color:#93c5fd; }
+  .td-ro { color: var(--text-dim); font-size: 10px; }
+  .btn-del { background: none; border: none; color: var(--text-mute); cursor: pointer; font-size: 12px; padding: 0 4px; }
+  .btn-del:hover { color: var(--red); }
+  .btn-add { padding: 5px 12px; background: #166534; color: #fff; border: 1px solid #166534; border-radius: 4px; cursor: pointer; font-size: 10px; font-family: var(--mono); }
+  .btn-add:hover { background: #14532d; }
+  .err-msg { margin-left: 10px; color: #f87171; font-size: 10px; }
+  .new-row td { background: var(--bg3) !important; }
+
+  /* ── GANTT ── */
+  #gantt-wrap { display: flex; overflow-x: hidden; }
+  #gantt-labels {
+    min-width: 220px; flex-shrink: 0;
+    background: var(--bg3);
+    border-right: 1px solid var(--border);
+    z-index: 2;
+  }
+  .gantt-lbl-hdr {
+    height: 56px;
+    border-bottom: 1px solid var(--border2);
+    display: flex; align-items: flex-end;
+    padding: 0 0 6px 14px;
+    font-size: 10px; color: var(--text-dim);
+  }
+  .gantt-lbl-row {
+    height: 38px;
+    display: flex; align-items: center;
+    padding: 0 12px; gap: 8px;
+    border-bottom: 1px solid #091628;
+  }
+  .gantt-lbl-row:nth-child(odd)  { background: var(--bg3); }
+  .gantt-lbl-row:nth-child(even) { background: #060d1a; }
+  .gantt-id { font-weight: 800; font-family: var(--mono); font-size: 11px; min-width: 18px; }
+  .gantt-name { color: #cbd5e1; font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #gantt-scroll { overflow-x: auto; flex-grow: 1; }
+
+  /* ── PERT ── */
+  #pert-svg-wrap { padding: 8px 24px 32px; overflow-x: auto; }
+
+  /* ── PRINT ── */
+  @media print {
+    body { background: var(--bg) !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    .no-print { display: none !important; }
+    #header { position: static; }
+    @page { size: A3 landscape; margin: 10mm; }
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg3); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: var(--blue); }
+</style>
+</head>
+<body>
+
+<!-- ═══ HEADER ═══ -->
+<div id="header">
+  <div class="hdr-row">
+    <div>
+      <div id="title-wrap">
+        <span id="title-display">NHMFC BONDS 2026</span>
+        <input id="title-input" type="text" value="NHMFC BONDS 2026"/>
+        <span id="edit-icon">✎</span>
+      </div>
+      <div class="hdr-meta">
+        <span class="hdr-label">START</span>
+        <input id="project-start" type="date" class="hdr-date-input" value="2026-05-13"/>
+        <span style="color:var(--border2)">→</span>
+        <span class="hdr-label">END</span>
+        <span id="project-end-display" class="hdr-date-out">—</span>
+        <span class="hdr-sep">|</span>
+        <span id="cal-days" class="hdr-stat-green">— cal. days</span>
+        <span class="hdr-sep">|</span>
+        <span id="crit-path" class="hdr-stat-red">CP: —</span>
+      </div>
+    </div>
+
+    <div class="btn-cluster no-print">
+      <button class="btn-tab active" id="btn-gantt" onclick="switchTab('gantt')">📊 Gantt</button>
+      <button class="btn-tab"       id="btn-pert"  onclick="switchTab('pert')">🕸 PERT-CPM</button>
+      <div class="btn-divider"></div>
+      <button class="btn-save" onclick="saveChanges()">💾 Save Changes <span id="save-msg"></span></button>
+      <button class="btn-pdf"  onclick="downloadPDF()">📄 Download PDF</button>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ GANTT TAB ═══ -->
+<div id="tab-gantt">
+
+  <!-- Gantt toolbar -->
+  <div class="toolbar no-print">
+    <div class="toolbar-hint">
+      ✏️ Edit tasks below — bars animate instantly &nbsp;·&nbsp;
+      <span style="color:var(--teal)">TODAY: <span id="today-label">—</span></span>
+      &nbsp;·&nbsp;End: <span id="gantt-end-label" style="color:var(--red)">—</span>
+      &nbsp;·&nbsp;<span id="gantt-days-label" style="color:var(--green)">— cal. days</span>
+    </div>
+    <div style="display:flex;gap:6px;align-items:center">
+      <span style="font-size:10px;color:var(--text-dim)">Zoom</span>
+      <button class="btn-sm" onclick="setZoom(0.6)">−−</button>
+      <button class="btn-sm active" id="zoom-1" onclick="setZoom(1)">1×</button>
+      <button class="btn-sm" onclick="setZoom(1.5)">1.5×</button>
+      <button class="btn-sm" onclick="setZoom(2.5)">2×</button>
+      <div class="btn-divider"></div>
+      <button class="btn-sm tog" id="toggle-editor-gantt" onclick="toggleEditor('gantt')">▲ Hide Editor</button>
+    </div>
+  </div>
+
+  <div id="editor-gantt">
+    <div class="editor-wrap">
+      <div style="overflow-x:auto">
+        <table class="editor-table" id="table-gantt"><thead><tr>
+          <th>ID</th><th>Task Name</th><th>Predecessors</th>
+          <th>Start (auto)</th><th>End Date ✎</th><th>Cal Days</th>
+          <th>TF</th><th>FF</th><th>Type</th><th></th>
+        </tr></thead>
+        <tbody id="tbody-gantt"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <span>■ <span class="leg-crit">CRITICAL</span></span>
+    <span>■ <span class="leg-near">NEAR-CRIT</span></span>
+    <span>■ <span class="leg-non">NON-CRIT</span></span>
+    <span style="color:var(--text-mute)">░ = float &nbsp; │ = today</span>
+  </div>
+
+  <div id="gantt-wrap">
+    <div id="gantt-labels">
+      <div class="gantt-lbl-hdr">TASK</div>
+      <div id="gantt-label-rows"></div>
+    </div>
+    <div id="gantt-scroll">
+      <svg id="gantt-svg" style="display:block;background:var(--bg3)"></svg>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ PERT TAB ═══ -->
+<div id="tab-pert" style="display:none">
+
+  <div class="toolbar no-print">
+    <div class="toolbar-hint">
+      ✏️ Edit <b>End Date</b> to change duration · Edit <b>Predecessors</b> to rewire the network
+    </div>
+    <button class="btn-sm tog" id="toggle-editor-pert" onclick="toggleEditor('pert')">▲ Hide Editor</button>
+  </div>
+
+  <div id="editor-pert">
+    <div class="editor-wrap">
+      <div style="overflow-x:auto">
+        <table class="editor-table"><thead><tr>
+          <th>ID</th><th>Task Name</th><th>Predecessors</th>
+          <th>Start (auto)</th><th>End Date ✎</th><th>Cal Days</th>
+          <th>ES</th><th>EF</th><th>LS</th><th>LF</th>
+          <th>TF</th><th>FF</th><th>Type</th><th></th>
+        </tr></thead>
+        <tbody id="tbody-pert"></tbody></table>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend" style="margin-top:4px">
+    <span>● <span class="leg-crit">RED = Critical (TF=0)</span></span>
+    <span>● <span class="leg-near">AMBER = Near-Critical (TF≤1)</span></span>
+    <span>● <span class="leg-non">BLUE = Non-Critical</span></span>
+    <span class="leg-hint">Start auto-adjusts · Edit End Date to set duration</span>
+  </div>
+
+  <div id="pert-svg-wrap">
+    <svg id="pert-svg" style="background:var(--bg3);border-radius:8px;border:1px solid var(--border);display:block"></svg>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════
+//  STATE
+// ══════════════════════════════════════════════
+const MONTH_NAMES = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+let state = {
+  tasks: [
+    { id:"A", name:"Asset Pool Approval",                  predecessors:[],         duration:1   },
+    { id:"B", name:"Engagement of Transaction Parties",    predecessors:["A"],      duration:14  },
+    { id:"C", name:"Financial Structure",                  predecessors:["B"],      duration:93  },
+    { id:"D", name:"Board Approval",                       predecessors:["C"],      duration:91  },
+    { id:"E", name:"DHSUD Certification",                  predecessors:["D"],      duration:95  },
+    { id:"F", name:"Signing / SPT Agreement",              predecessors:["E"],      duration:1   },
+    { id:"G", name:"BSP Endorsement",                      predecessors:["F"],      duration:22  },
+    { id:"H", name:"Final Credit Rating & SEC Submission", predecessors:["B"],      duration:330 },
+    { id:"I", name:"SEC Approval",                         predecessors:["G","H"],  duration:71  },
+    { id:"J", name:"Marketing of RMBS",                    predecessors:["I"],      duration:68  },
+    { id:"K", name:"Bond Issuance",                        predecessors:["J"],      duration:1   },
+  ],
+  projectStart: new Date(2026, 4, 13),
+  title: "NHMFC BONDS 2026",
+  tab: "gantt",
+  zoom: 1,
+  showEditorGantt: true,
+  showEditorPert: true,
+};
+
+// ══════════════════════════════════════════════
+//  DATE HELPERS
+// ══════════════════════════════════════════════
+function isValidDate(d) { return d instanceof Date && !isNaN(d.getTime()); }
+function addDays(d, n) { if (!isValidDate(d) || n==null || isNaN(n)) return new Date(d); const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function diffDays(a, b) { return Math.round((b-a)/86400000); }
+function fmtLong(d) { if (!isValidDate(d)) return "—"; return `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`; }
+function fmtShort(d) { if (!isValidDate(d)) return "—"; return `${MONTH_NAMES[d.getMonth()].slice(0,3)} ${d.getDate()}`; }
+function toISO(d) { if (!isValidDate(d)) return ""; return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; }
+function fromISO(s) { const [y,m,d]=s.split("-").map(Number); return new Date(y,m-1,d); }
+
+// ══════════════════════════════════════════════
+//  CPM ENGINE
+// ══════════════════════════════════════════════
+function computeCPM(tasks, projectStart) {
+  const map = Object.fromEntries(tasks.map(t=>[t.id,t]));
+  const ids  = tasks.map(t=>t.id);
+  const es   = Object.fromEntries(ids.map(id=>[id,0]));
+  const ef   = Object.fromEntries(ids.map(id=>[id,0]));
+
+  const visited=new Set(), inStack=new Set(), order=[];
+  function visit(id) {
+    if (visited.has(id)||inStack.has(id)) return;
+    inStack.add(id);
+    (map[id]?.predecessors||[]).forEach(p=>{ if(map[p]) visit(p); });
+    inStack.delete(id); visited.add(id); order.push(id);
+  }
+  ids.forEach(visit);
+
+  order.forEach(id=>{
+    const preds=(map[id].predecessors||[]).filter(p=>map[p]&&ef[p]!=null);
+    es[id]=preds.length===0?0:Math.max(...preds.map(p=>ef[p]+1));
+    ef[id]=es[id]+(map[id].duration||1)-1;
+  });
+
+  const projectEnd=ids.length?Math.max(...ids.map(id=>ef[id]??0)):0;
+  const succ=Object.fromEntries(ids.map(id=>[id,[]]));
+  tasks.forEach(t=>(t.predecessors||[]).forEach(p=>{ if(succ[p]) succ[p].push(t.id); }));
+
+  const ls=Object.fromEntries(ids.map(id=>[id,0]));
+  const lf=Object.fromEntries(ids.map(id=>[id,0]));
+  [...order].reverse().forEach(id=>{
+    const s=succ[id].filter(x=>map[x]);
+    lf[id]=s.length===0?projectEnd:Math.min(...s.map(x=>ls[x]-1));
+    ls[id]=lf[id]-(map[id].duration||1)+1;
+  });
+
+  const tf={}, ff={};
+  ids.forEach(id=>{
+    tf[id]=(ls[id]??0)-(es[id]??0);
+    const s=succ[id].filter(x=>map[x]);
+    ff[id]=s.length===0?tf[id]:Math.min(...s.map(x=>es[x]))-ef[id]-1;
+  });
+
+  const lvl={};
+  order.forEach(id=>{
+    const preds=(map[id].predecessors||[]).filter(p=>map[p]);
+    lvl[id]=preds.length===0?0:Math.max(...preds.map(p=>lvl[p]??0))+1;
+  });
+
+  return {
+    es,ef,ls,lf,tf,ff,lvl,projectEnd,succ,
+    startDate: id=>addDays(projectStart,es[id]??0),
+    endDate:   id=>addDays(projectStart,ef[id]??0),
+  };
+}
+
+function taskColorClass(tf) {
+  const v=tf??0;
+  if (v===0) return { bar:"#ef4444", hd:"#7f1d1d", bg:"#991b1b", badge:"badge-crit", label:"CRITICAL" };
+  if (v<=1)  return { bar:"#f59e0b", hd:"#78350f", bg:"#92400e", badge:"badge-near", label:"NEAR-CRIT" };
+  return            { bar:"#3b82f6", hd:"#1e3a8a", bg:"#1e3a8a", badge:"badge-non",  label:"NON-CRIT"  };
+}
+
+// ══════════════════════════════════════════════
+//  RENDER HEADER
+// ══════════════════════════════════════════════
+function renderHeader() {
+  const cpm = computeCPM(state.tasks, state.projectStart);
+  const end = addDays(state.projectStart, cpm.projectEnd);
+  document.getElementById("project-end-display").textContent = toISO(end);
+  document.getElementById("cal-days").textContent = `${cpm.projectEnd+1} cal. days`;
+  const cp = state.tasks.filter(t=>cpm.tf[t.id]===0)
+    .sort((a,b)=>cpm.es[a.id]-cpm.es[b.id]).map(t=>t.id).join(" → ");
+  document.getElementById("crit-path").textContent = `CP: ${cp}`;
+
+  const today = new Date();
+  document.getElementById("today-label").textContent = fmtShort(today);
+  document.getElementById("gantt-end-label").textContent = fmtLong(end);
+  document.getElementById("gantt-days-label").textContent = `${cpm.projectEnd+1} cal. days`;
+}
+
+// ══════════════════════════════════════════════
+//  RENDER EDITOR TABLE
+// ══════════════════════════════════════════════
+function renderEditor(mode) {
+  const cpm = computeCPM(state.tasks, state.projectStart);
+  const showCPM = mode === "pert";
+  const tbodyId = mode === "gantt" ? "tbody-gantt" : "tbody-pert";
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+
+  let html = "";
+  state.tasks.forEach(t => {
+    const tfVal = cpm.tf[t.id]??0;
+    const c = taskColorClass(tfVal);
+    const sd = cpm.startDate(t.id);
+    const ed = cpm.endDate(t.id);
+    const sdISO = toISO(sd), edISO = toISO(ed);
+    const cpmCols = showCPM ? `
+      <td class="td-ro">${cpm.es[t.id]??0}</td>
+      <td class="td-ro">${cpm.ef[t.id]??0}</td>
+      <td class="td-ro">${cpm.ls[t.id]??0}</td>
+      <td class="td-ro">${cpm.lf[t.id]??0}</td>` : "";
+    html += `<tr data-id="${t.id}">
+      <td style="font-weight:800;color:${c.bar}">${t.id}</td>
+      <td><input class="ed-inp" data-field="name" data-id="${t.id}" value="${escHtml(t.name)}"/></td>
+      <td><input class="ed-inp pred-inp" style="width:80px" data-field="predecessors" data-id="${t.id}" value="${t.predecessors.join(",")}" placeholder="none"/></td>
+      <td class="td-ro" style="white-space:nowrap">${fmtShort(sd)}</td>
+      <td><input type="date" class="ed-date" data-field="endDate" data-id="${t.id}" value="${edISO}" min="${sdISO}"/></td>
+      <td class="td-ro" style="text-align:center">${t.duration}</td>
+      ${cpmCols}
+      <td><span class="${c.badge}">${tfVal}d</span></td>
+      <td class="td-ro">${cpm.ff[t.id]??0}d</td>
+      <td><span class="${c.badge}">${c.label}</span></td>
+      <td><button class="btn-del" data-del="${t.id}">✕</button></td>
+    </tr>`;
+  });
+
+  // New row
+  const cols = showCPM ? 14 : 10;
+  html += `<tr class="new-row">
+    <td><input class="ed-inp" id="new-id-${mode}" style="width:36px" placeholder="ID"/></td>
+    <td><input class="ed-inp" id="new-name-${mode}" placeholder="Task name"/></td>
+    <td><input class="ed-inp" id="new-pred-${mode}" style="width:80px" placeholder="e.g. A,B"/></td>
+    <td colspan="${cols-4}">
+      <button class="btn-add" onclick="addTask('${mode}')">+ Add Task</button>
+      <span class="err-msg" id="err-${mode}"></span>
+    </td>
+    <td></td>
+  </tr>`;
+
+  tbody.innerHTML = html;
+  attachEditorEvents(mode);
+}
+
+function attachEditorEvents(mode) {
+  const tbodyId = mode === "gantt" ? "tbody-gantt" : "tbody-pert";
+  const tbody = document.getElementById(tbodyId);
+  if (!tbody) return;
+
+  // Name inputs
+  tbody.querySelectorAll('.ed-inp[data-field="name"]').forEach(inp => {
+    inp.addEventListener("change", e => {
+      updateTask(e.target.dataset.id, "name", e.target.value);
+    });
+  });
+
+  // Predecessor inputs (buffered)
+  tbody.querySelectorAll('.pred-inp[data-field="predecessors"]').forEach(inp => {
+    inp.addEventListener("input", e => {
+      let v = e.target.value.toUpperCase();
+      v = v.replace(/([A-Z0-9])([A-Z])/g, "$1,$2");
+      e.target.value = v;
+    });
+    inp.addEventListener("blur",    e => updateTask(e.target.dataset.id, "predecessors", e.target.value));
+    inp.addEventListener("keydown", e => { if (e.key==="Enter") { updateTask(e.target.dataset.id,"predecessors",e.target.value); e.target.blur(); }});
+  });
+
+  // End date inputs
+  tbody.querySelectorAll('.ed-date[data-field="endDate"]').forEach(inp => {
+    inp.addEventListener("change", e => {
+      if (e.target.value) updateTask(e.target.dataset.id, "endDate", e.target.value);
+    });
+  });
+
+  // Delete buttons
+  tbody.querySelectorAll('[data-del]').forEach(btn => {
+    btn.addEventListener("click", e => {
+      const id = e.target.dataset.del;
+      state.tasks = state.tasks.filter(t=>t.id!==id).map(t=>({...t, predecessors:t.predecessors.filter(p=>p!==id)}));
+      renderAll();
+    });
+  });
+}
+
+function updateTask(id, field, val) {
+  const cpm = computeCPM(state.tasks, state.projectStart);
+  state.tasks = state.tasks.map(t => {
+    if (t.id !== id) return t;
+    if (field === "predecessors")
+      return {...t, predecessors: val.split(",").map(s=>s.trim().toUpperCase()).filter(Boolean)};
+    if (field === "endDate") {
+      const sd = cpm.startDate(id);
+      const end = fromISO(val);
+      return {...t, duration: Math.max(1, diffDays(sd,end)+1)};
+    }
+    return {...t, [field]: val};
+  });
+  renderAll();
+}
+
+function addTask(mode) {
+  const id   = (document.getElementById(`new-id-${mode}`)?.value||"").trim().toUpperCase();
+  const name = (document.getElementById(`new-name-${mode}`)?.value||"").trim();
+  const pred = (document.getElementById(`new-pred-${mode}`)?.value||"").toUpperCase();
+  const errEl = document.getElementById(`err-${mode}`);
+  if (!id) { errEl.textContent="ID required"; return; }
+  if (state.tasks.find(t=>t.id===id)) { errEl.textContent=`"${id}" already exists`; return; }
+  const preds = pred.split(",").map(s=>s.trim()).filter(Boolean);
+  state.tasks = [...state.tasks, {id, name:name||id, predecessors:preds, duration:1}];
+  errEl.textContent = "";
+  renderAll();
+}
+
+// ══════════════════════════════════════════════
+//  RENDER GANTT
+// ══════════════════════════════════════════════
+function renderGantt() {
+  const cpm = computeCPM(state.tasks, state.projectStart);
+  const today     = new Date();
+  const pxPerDay  = 1.4 * state.zoom;
+  const totalDays = Math.max(cpm.projectEnd + 80, 1);
+  const chartW    = totalDays * pxPerDay;
+  const ROW_H     = 38, HDR_H = 56;
+  const chartH    = HDR_H + state.tasks.length * ROW_H + 20;
+  const todayOff  = diffDays(state.projectStart, today);
+
+  // Label column
+  const labelsEl = document.getElementById("gantt-label-rows");
+  labelsEl.innerHTML = state.tasks.map((t,i) => {
+    const c = taskColorClass(cpm.tf[t.id]);
+    return `<div class="gantt-lbl-row">
+      <span class="gantt-id" style="color:${c.bar}">${t.id}</span>
+      <span class="gantt-name">${escHtml(t.name)}</span>
+    </div>`;
+  }).join("");
+
+  // Month headers
+  const months = [];
+  let cur = new Date(state.projectStart.getFullYear(), state.projectStart.getMonth(), 1);
+  while (diffDays(state.projectStart, cur) < totalDays) {
+    const next = new Date(cur.getFullYear(), cur.getMonth()+1, 1);
+    const x = Math.max(0, diffDays(state.projectStart, cur)) * pxPerDay;
+    const w = diffDays(cur, next) * pxPerDay;
+    months.push({label:`${MONTH_NAMES[cur.getMonth()]} ${cur.getFullYear()}`,x,w});
+    cur = next;
+  }
+
+  // Week ticks
+  const weeks = [];
+  let wd = new Date(state.projectStart);
+  while (diffDays(state.projectStart, wd) < totalDays) {
+    weeks.push({x: diffDays(state.projectStart, wd)*pxPerDay, label: wd.getDate()});
+    wd = addDays(wd, 7);
+  }
+
+  // Dependency arrows
+  let arrowsSVG = `<defs>
+    <marker id="ga-c" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="rgba(239,68,68,0.6)"/></marker>
+    <marker id="ga-n" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="rgba(51,65,85,0.6)"/></marker>
+  </defs>`;
+  state.tasks.forEach(t => (t.predecessors||[]).forEach(pred => {
+    const pi = state.tasks.findIndex(tt=>tt.id===pred);
+    const ti = state.tasks.findIndex(tt=>tt.id===t.id);
+    if (pi<0||ti<0) return;
+    const x1=(cpm.ef[pred]+1)*pxPerDay, y1=HDR_H+pi*ROW_H+ROW_H/2;
+    const x2=cpm.es[t.id]*pxPerDay,     y2=HDR_H+ti*ROW_H+ROW_H/2;
+    const isCrit = cpm.tf[pred]===0 && cpm.tf[t.id]===0;
+    arrowsSVG += `<path d="M${x1},${y1} C${x1+20},${y1} ${x2-20},${y2} ${x2},${y2}"
+      fill="none" stroke="${isCrit?'rgba(239,68,68,0.4)':'rgba(51,65,85,0.5)'}"
+      stroke-width="1.2" stroke-dasharray="${isCrit?'':'3,3'}"
+      marker-end="url(#ga-${isCrit?'c':'n'})"/>`;
+  }));
+
+  // Bars
+  let barsSVG = "";
+  state.tasks.forEach((t,i) => {
+    const c = taskColorClass(cpm.tf[t.id]);
+    const x = cpm.es[t.id]*pxPerDay;
+    const w = Math.max(t.duration*pxPerDay, 3);
+    const fW = Math.max((cpm.tf[t.id]??0)*pxPerDay, 0);
+    const y = HDR_H + i*ROW_H;
+    const bh = ROW_H - 10;
+    barsSVG += `<g transform="translate(${x},${y+5})">
+      ${(cpm.tf[t.id]??0)>0 ? `<rect x="0" y="4" width="${w+fW}" height="${bh-8}" rx="2" fill="${c.bar}" opacity="0.13"/>` : ""}
+      <rect x="0" y="0" width="${w}" height="${bh}" rx="3" fill="${c.bar}"/>
+      <rect x="0" y="0" width="${w}" height="${bh/3}" rx="3" fill="rgba(255,255,255,0.13)"/>
+      ${w>50 ? `<text x="6" y="${bh/2+4}" fill="#fff" font-size="9" font-family="'IBM Plex Mono',monospace" font-weight="700">${t.duration}d</text>` : ""}
+    </g>`;
+  });
+
+  // Today line
+  let todaySVG = "";
+  if (todayOff >= 0 && todayOff <= totalDays) {
+    const tx = todayOff * pxPerDay;
+    todaySVG = `<g>
+      <line x1="${tx}" y1="0" x2="${tx}" y2="${chartH}" stroke="#22d3ee" stroke-width="1.5" stroke-dasharray="4,3" opacity="0.8"/>
+      <rect x="${tx-18}" y="0" width="36" height="20" rx="3" fill="#22d3ee"/>
+      <text x="${tx}" y="13" text-anchor="middle" fill="#000" font-size="8" font-family="'IBM Plex Mono',monospace" font-weight="800">TODAY</text>
+    </g>`;
+  }
+
+  // Month bands
+  let monthSVG = months.map((m,i) => `
+    <g>
+      <rect x="${m.x}" y="0" width="${m.w}" height="28" fill="${i%2===0?'#050c1a':'#060d1c'}"/>
+      <text x="${m.x+m.w/2}" y="18" text-anchor="middle" fill="#60a5fa" font-size="10" font-family="'IBM Plex Mono',monospace" font-weight="700">${m.label}</text>
+      <line x1="${m.x}" y1="0" x2="${m.x}" y2="${chartH}" stroke="#0f172a" stroke-width="1"/>
+    </g>`).join("");
+
+  // Week ticks
+  let weekSVG = weeks.map((w,i) => `
+    <g>
+      <line x1="${w.x}" y1="28" x2="${w.x}" y2="${HDR_H}" stroke="#0f172a" stroke-width="1"/>
+      <text x="${w.x+2}" y="42" fill="#334155" font-size="8" font-family="'IBM Plex Mono',monospace">${w.label}</text>
+    </g>`).join("");
+
+  // Row backgrounds
+  let rowBgSVG = state.tasks.map((t,i) =>
+    `<rect x="0" y="${HDR_H+i*ROW_H}" width="${chartW}" height="${ROW_H}" fill="${i%2===0?'#040a12':'#060d1a'}"/>`
+  ).join("");
+
+  const svg = document.getElementById("gantt-svg");
+  svg.setAttribute("width", chartW);
+  svg.setAttribute("height", chartH);
+  svg.innerHTML = `
+    ${monthSVG}
+    ${weekSVG}
+    <line x1="0" y1="${HDR_H}" x2="${chartW}" y2="${HDR_H}" stroke="#1e3a5f" stroke-width="1"/>
+    ${rowBgSVG}
+    ${arrowsSVG}
+    ${barsSVG}
+    ${todaySVG}
+  `;
+}
+
+// ══════════════════════════════════════════════
+//  RENDER PERT
+// ══════════════════════════════════════════════
+const NW=170, NH=96, LGAP=230, RGAP=130;
+
+function computeLayout(tasks, lvl) {
+  const groups = {};
+  tasks.forEach(t => { const l=lvl[t.id]??0; (groups[l]=groups[l]||[]).push(t.id); });
+  const pos = {};
+  Object.entries(groups).forEach(([lv,ids]) => {
+    const x = parseInt(lv)*LGAP+40;
+    ids.forEach((id,i) => { pos[id]={x, y:40+i*RGAP}; });
+  });
+  const maxX = Math.max(...Object.values(pos).map(p=>p.x))+NW+60;
+  const maxY = Math.max(...Object.values(pos).map(p=>p.y))+NH+60;
+  return {pos, maxX, maxY};
+}
+
+function renderPert() {
+  const cpm = computeCPM(state.tasks, state.projectStart);
+  const layout = computeLayout(state.tasks, cpm.lvl);
+
+  // Arrows
+  let arrows = `<defs>
+    <marker id="pa-c" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#ef4444"/></marker>
+    <marker id="pa-n" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><path d="M0,0 L0,6 L8,3 z" fill="#334155"/></marker>
+  </defs>`;
+  state.tasks.forEach(t => (t.predecessors||[]).forEach(pred => {
+    const pf=layout.pos[pred], tp=layout.pos[t.id];
+    if (!pf||!tp) return;
+    const x1=pf.x+NW, y1=pf.y+NH/2, x2=tp.x, y2=tp.y+NH/2;
+    const mx=(x1+x2)/2;
+    const isCrit=cpm.tf[pred]===0&&cpm.tf[t.id]===0;
+    arrows += `<path d="M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}"
+      fill="none" stroke="${isCrit?'#ef4444':'#334155'}"
+      stroke-width="${isCrit?2.5:1.5}" stroke-dasharray="${isCrit?'':'5,4'}"
+      marker-end="url(#pa-${isCrit?'c':'n'})"/>`;
+  }));
+
+  // Nodes
+  let nodes = "";
+  state.tasks.forEach(t => {
+    const p=layout.pos[t.id]; if (!p) return;
+    const c=taskColorClass(cpm.tf[t.id]);
+    const sd=cpm.startDate(t.id), ed=cpm.endDate(t.id);
+    const short=t.name.length>24?t.name.slice(0,22)+"…":t.name;
+    nodes += `<g transform="translate(${p.x},${p.y})">
+      <rect width="${NW}" height="${NH}" rx="5" fill="${c.bg}"/>
+      <rect width="${NW}" height="22" rx="5" fill="${c.hd}"/>
+      <rect y="18" width="${NW}" height="6" fill="${c.hd}"/>
+      <text x="${NW/2}" y="15" text-anchor="middle" fill="#fff" font-size="12" font-weight="800" font-family="'IBM Plex Mono',monospace">${t.id}  ·  ${t.duration}d</text>
+      <text x="${NW/2}" y="35" text-anchor="middle" fill="rgba(255,255,255,.85)" font-size="8.5" font-family="'IBM Plex Mono',monospace">${escHtml(short)}</text>
+      <text x="8"       y="51" fill="rgba(255,255,255,.55)" font-size="7.5" font-family="monospace">ES ${fmtShort(sd)}</text>
+      <text x="${NW-8}" y="51" text-anchor="end" fill="rgba(255,255,255,.55)" font-size="7.5" font-family="monospace">EF ${fmtShort(ed)}</text>
+      <line x1="0" y1="55" x2="${NW}" y2="55" stroke="rgba(255,255,255,.12)"/>
+      <text x="8"       y="67" fill="rgba(255,255,255,.55)" font-size="7.5" font-family="monospace">LS ${cpm.ls[t.id]}</text>
+      <text x="${NW-8}" y="67" text-anchor="end" fill="rgba(255,255,255,.55)" font-size="7.5" font-family="monospace">LF ${cpm.lf[t.id]}</text>
+      <line x1="0" y1="71" x2="${NW}" y2="71" stroke="rgba(255,255,255,.12)"/>
+      <text x="${NW/2}" y="87" text-anchor="middle" fill="rgba(255,255,255,.9)" font-size="9" font-weight="700" font-family="monospace">TF=${cpm.tf[t.id]}d · FF=${cpm.ff[t.id]}d</text>
+    </g>`;
+  });
+
+  const svg = document.getElementById("pert-svg");
+  svg.setAttribute("width", layout.maxX);
+  svg.setAttribute("height", layout.maxY);
+  svg.innerHTML = arrows + nodes;
+}
+
+// ══════════════════════════════════════════════
+//  RENDER ALL
+// ══════════════════════════════════════════════
+function renderAll() {
+  renderHeader();
+  renderEditor("gantt");
+  renderEditor("pert");
+  if (state.tab === "gantt") renderGantt();
+  else renderPert();
+}
+
+// ══════════════════════════════════════════════
+//  UI INTERACTIONS
+// ══════════════════════════════════════════════
+function switchTab(tab) {
+  state.tab = tab;
+  document.getElementById("tab-gantt").style.display = tab==="gantt" ? "" : "none";
+  document.getElementById("tab-pert").style.display  = tab==="pert"  ? "" : "none";
+  document.getElementById("btn-gantt").classList.toggle("active", tab==="gantt");
+  document.getElementById("btn-pert").classList.toggle("active",  tab==="pert");
+  if (tab==="gantt") renderGantt();
+  else               renderPert();
+}
+
+function setZoom(z) {
+  state.zoom = z;
+  document.querySelectorAll(".btn-sm[onclick^='setZoom']").forEach(b => b.classList.remove("active"));
+  const labels={0.6:"−−",1:"1×",1.5:"1.5×",2.5:"2×"};
+  document.querySelectorAll(".btn-sm[onclick^='setZoom']").forEach(b => {
+    const bz = parseFloat(b.getAttribute("onclick").match(/[\d.]+/)[0]);
+    b.classList.toggle("active", bz===z);
+  });
+  renderGantt();
+}
+
+function toggleEditor(mode) {
+  const key = mode==="gantt"?"showEditorGantt":"showEditorPert";
+  state[key] = !state[key];
+  const el  = document.getElementById(`editor-${mode}`);
+  const btn = document.getElementById(`toggle-editor-${mode}`);
+  el.style.display = state[key] ? "" : "none";
+  btn.textContent  = state[key] ? "▲ Hide Editor" : "▼ Show Editor";
+  btn.classList.toggle("active", state[key]);
+}
+
+// Title editing
+document.getElementById("title-display").addEventListener("click", startEditTitle);
+document.getElementById("edit-icon").addEventListener("click", startEditTitle);
+document.getElementById("title-input").addEventListener("blur", stopEditTitle);
+document.getElementById("title-input").addEventListener("keydown", e => { if(e.key==="Enter") stopEditTitle(); });
+
+function startEditTitle() {
+  const d=document.getElementById("title-display"), i=document.getElementById("title-input");
+  d.style.display="none"; i.style.display="inline-block";
+  i.value=state.title; i.focus();
+}
+function stopEditTitle() {
+  const d=document.getElementById("title-display"), i=document.getElementById("title-input");
+  state.title = i.value || state.title;
+  d.textContent = state.title;
+  d.style.display="inline"; i.style.display="none";
+}
+
+// Project start date
+document.getElementById("project-start").addEventListener("change", e => {
+  if (e.target.value) { state.projectStart = fromISO(e.target.value); renderAll(); }
+});
+
+// ══════════════════════════════════════════════
+//  SAVE CHANGES (download HTML snapshot)
+// ══════════════════════════════════════════════
+function saveChanges() {
+  const tasksJson = JSON.stringify(state.tasks, null, 4);
+  const startISO  = toISO(state.projectStart);
+  const [sy,sm,sd] = startISO.split("-").map(Number);
+
+  // Produce self-contained HTML with current state baked in
+  let src = document.documentElement.outerHTML;
+  src = src.replace(
+    /let state = \{[\s\S]*?^};/m,
+    `let state = {
+  tasks: ${tasksJson},
+  projectStart: new Date(${sy}, ${sm-1}, ${sd}),
+  title: ${JSON.stringify(state.title)},
+  tab: "gantt",
+  zoom: 1,
+  showEditorGantt: true,
+  showEditorPert: true,
+};`
+  );
+
+  const blob = new Blob([src], {type:"text/html"});
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement("a");
+  a.href = url;
+  a.download = `NHMFC_Bonds_Saved_${new Date().toISOString().slice(0,10)}.html`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  const msg = document.getElementById("save-msg");
+  msg.textContent = "✔ Saved!";
+  setTimeout(() => msg.textContent="", 2500);
+}
+
+// ══════════════════════════════════════════════
+//  DOWNLOAD PDF
+// ══════════════════════════════════════════════
+function downloadPDF() {
+  const style = document.createElement("style");
+  style.id = "__pdf_style";
+  style.innerHTML = `@media print {
+    body { background:#060d1a!important; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
+    .no-print { display:none!important; }
+    #header { position:static; }
+    @page { size:A3 landscape; margin:10mm; }
+  }`;
+  document.head.appendChild(style);
+  window.print();
+  setTimeout(() => { const s=document.getElementById("__pdf_style"); if(s) s.remove(); }, 1000);
+}
+
+// ══════════════════════════════════════════════
+//  UTILS
+// ══════════════════════════════════════════════
+function escHtml(s) {
+  return String(s).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// ══════════════════════════════════════════════
+//  BOOT
+// ══════════════════════════════════════════════
+renderAll();
+</script>
+</body>
+</html>
