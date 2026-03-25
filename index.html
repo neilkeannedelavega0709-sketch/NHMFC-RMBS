@@ -154,11 +154,6 @@
 
     <button class="gate-btn" onclick="tryLogin()">ENTER</button>
     <div class="gate-err" id="gate-err"></div>
-    <div class="gate-hint">
-      Default viewer pw: <strong style="color:#334155">view1234</strong><br>
-      Default editor pw: <strong style="color:#334155">edit5678</strong><br>
-      <span style="color:#0f2a4a">Change passwords in the ⚙ Settings after login.</span>
-    </div>
   </div>
 </div>
 
@@ -217,9 +212,10 @@
   <!-- SETTINGS MODAL -->
   <div id="settings-modal" style="display:none;position:fixed;inset:0;background:rgba(3,8,16,0.85);z-index:7000;align-items:center;justify-content:center;">
     <div style="background:#070f1e;border:1px solid #1e3a5f;border-radius:10px;padding:32px;width:380px;max-width:95vw;">
-      <div style="font-size:14px;font-weight:800;color:#60a5fa;letter-spacing:2px;margin-bottom:20px;">⚙ PASSWORD SETTINGS</div>
-      <div class="gate-field"><label>NEW VIEWER PASSWORD</label><input type="password" id="new-view-pw" placeholder="Leave blank to keep current"/></div>
-      <div class="gate-field"><label>NEW EDITOR PASSWORD</label><input type="password" id="new-edit-pw" placeholder="Leave blank to keep current"/></div>
+      <div style="font-size:14px;font-weight:800;color:#60a5fa;letter-spacing:2px;margin-bottom:6px;">⚙ PASSWORD SETTINGS</div>
+      <div style="font-size:10px;color:#475569;margin-bottom:18px;">Leave a field blank to keep its current password.</div>
+      <div class="gate-field"><label>VIEWER PASSWORD</label><input type="password" id="new-view-pw" placeholder="New viewer password"/></div>
+      <div class="gate-field"><label>EDITOR PASSWORD</label><input type="password" id="new-edit-pw" placeholder="New editor password"/></div>
       <div style="display:flex;gap:8px;margin-top:18px;">
         <button class="gate-btn" style="flex:1;" onclick="saveSettings()">SAVE</button>
         <button class="gate-btn" style="flex:0.5;background:#1e293b;" onclick="closeSettings()">CANCEL</button>
@@ -430,14 +426,13 @@ function enterApp(){
   const app=document.getElementById('app');
   app.classList.add('visible');
 
-  if(accessMode==='view'){
-    document.getElementById('readonly-badge').style.display='block';
-    document.getElementById('save-btn').style.display='none';
-    document.getElementById('settings-btn').style.display='none';
-    // lock editable fields
-    document.getElementById('proj-title').contentEditable='false';
-    document.getElementById('start-date').disabled=true;
-  }
+  const isView = accessMode==='view';
+  // Viewer mode — read only
+  document.getElementById('readonly-badge').style.display = isView ? 'block' : 'none';
+  document.getElementById('save-btn').style.display       = isView ? 'none'  : '';
+  document.getElementById('settings-btn').style.display   = isView ? 'none'  : '';
+  document.getElementById('proj-title').contentEditable   = isView ? 'false' : 'true';
+  document.getElementById('start-date').disabled          = isView;
 
   init();
 }
@@ -460,10 +455,16 @@ function closeSettings(){
 function saveSettings(){
   const vp=document.getElementById('new-view-pw').value.trim();
   const ep=document.getElementById('new-edit-pw').value.trim();
+  const msgEl=document.getElementById('settings-msg');
+  if(!vp && !ep){
+    msgEl.style.color='#f87171';
+    msgEl.textContent='Enter at least one new password.';
+    return;
+  }
   if(vp) PASSWORDS.view=vp;
   if(ep) PASSWORDS.edit=ep;
-  document.getElementById('settings-msg').style.color='#4ade80';
-  document.getElementById('settings-msg').textContent='✔ Passwords updated!';
+  msgEl.style.color='#4ade80';
+  msgEl.textContent='✔ Passwords updated!';
   document.getElementById('new-view-pw').value='';
   document.getElementById('new-edit-pw').value='';
   setTimeout(closeSettings,1500);
